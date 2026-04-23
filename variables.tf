@@ -7,20 +7,17 @@ variable "proj_name" {
 variable "aws_region" {
   description = "Region triển khai"
   type        = string
-  default     = "ap-southeast-1"
 }
 
 variable "db_username" {
   description = "Tài khoản đăng nhập Database"
   type        = string
-  default     = "dbadmin"
 }
 
 variable "db_password" {
   description = "Mật khẩu Database"
   type        = string
   sensitive   = true
-  default     = "SuperSecretPass123"
 }
 
 # ============================================================

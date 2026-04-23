@@ -1,6 +1,7 @@
 variable "proj_name" { type = string }
 
 variable "vpc_id" { type = string }
+variable "vpc_region" { type = string }
 variable "public_subnets" { type = list(string) }
 variable "private_subnets" { type = list(string) }
 variable "alb_sg_id" { type = string }

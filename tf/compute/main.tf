@@ -1,3 +1,32 @@
+# ==========================================
+# SECRETS MANAGER (Bảo mật API Keys)
+# ==========================================
+resource "aws_secretsmanager_secret" "backend_secrets" {
+  name_prefix             = "${var.proj_name}-backend-keys-"
+  description             = "Chứa toàn bộ API Keys nhạy cảm cho Backend"
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "backend_secrets_values" {
+  secret_id = aws_secretsmanager_secret.backend_secrets.id
+  secret_string = jsonencode({
+    MONGODB_URL                       = "mongodb://${var.db_username}:${var.db_password}@${var.db_endpoint}:27017/?tls=true&tlsCAFile=/app/global-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false"
+    SECRET_KEY_ACCESS_TOKEN           = var.secret_key_access_token
+    SECRET_KEY_REFRESH_TOKEN          = var.secret_key_refresh_token
+    STRIPE_SECRET_KEY                 = var.stripe_secret_key
+    STRIPE_ENPOINT_WEBHOOK_SECRET_KEY = var.stripe_webhook_secret
+    STRIPE_CLI_WEBHOOK_SECRET         = var.stripe_webhook_secret
+    EMAIL_USER                        = var.email_user
+    EMAIL_PASS                        = var.email_pass
+    GOOGLE_CLIENT_ID                  = var.google_client_id
+    GOOGLE_CLIENT_SECRET              = var.google_client_secret
+    GEMINI_API_KEY                    = var.gemini_api_key
+    RESEND_API                        = var.resend_api
+  })
+}
+
+# ==========================================
+
 resource "aws_ecr_repository" "backend" {
   name                 = "${var.proj_name}-backend"
   image_tag_mutability = "MUTABLE"
@@ -17,7 +46,7 @@ resource "aws_cloudwatch_log_group" "ecs_logs" {
   retention_in_days = 7
 }
 
-# IAM Role for ECS Task Execution (Pull image, Push Logs)
+# IAM Role for ECS Task Execution (Pull image, Push Logs, Get Secrets Manager)
 resource "aws_iam_role" "ecs_task_execution_role" {
   name = "${var.proj_name}-ecs-execution-role"
 
@@ -173,7 +202,7 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "PORT", value = "8080" },
         { name = "FRONTEND_URL", value = var.cdn_base_url },
         { name = "S3_BUCKET", value = var.s3_bucket },
-        { name = "AWS_REGION", value = "ap-southeast-1" },
+        { name = "AWS_REGION", value = var.vpc_region },
         { name = "CDN_BASE_URL", value = var.cdn_base_url }
       ]
       secrets = [
@@ -194,7 +223,7 @@ resource "aws_ecs_task_definition" "backend" {
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.ecs_logs.name
-          "awslogs-region"        = "ap-southeast-1"
+          "awslogs-region"        = var.vpc_region
           "awslogs-stream-prefix" = "ecs"
         }
       }
@@ -253,31 +282,3 @@ resource "aws_apigatewayv2_stage" "default_stage" {
   name        = "$default"
   auto_deploy = true
 }
-
-# ==========================================
-# SECRETS MANAGER (Bảo mật API Keys)
-# ==========================================
-resource "aws_secretsmanager_secret" "backend_secrets" {
-  name_prefix             = "${var.proj_name}-backend-keys-"
-  description             = "Chứa toàn bộ API Keys nhạy cảm cho Backend"
-  recovery_window_in_days = 0 # Đặt bằng 0 để dễ dàng destroy lúc demo/làm bài tập
-}
-
-resource "aws_secretsmanager_secret_version" "backend_secrets_values" {
-  secret_id = aws_secretsmanager_secret.backend_secrets.id
-  secret_string = jsonencode({
-    MONGODB_URL                       = "mongodb://${var.db_username}:${var.db_password}@${var.db_endpoint}:27017/?tls=true&tlsCAFile=/app/global-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false"
-    SECRET_KEY_ACCESS_TOKEN           = var.secret_key_access_token
-    SECRET_KEY_REFRESH_TOKEN          = var.secret_key_refresh_token
-    STRIPE_SECRET_KEY                 = var.stripe_secret_key
-    STRIPE_ENPOINT_WEBHOOK_SECRET_KEY = var.stripe_webhook_secret
-    STRIPE_CLI_WEBHOOK_SECRET         = var.stripe_webhook_secret
-    EMAIL_USER                        = var.email_user
-    EMAIL_PASS                        = var.email_pass
-    GOOGLE_CLIENT_ID                  = var.google_client_id
-    GOOGLE_CLIENT_SECRET              = var.google_client_secret
-    GEMINI_API_KEY                    = var.gemini_api_key
-    RESEND_API                        = var.resend_api
-  })
-}
-

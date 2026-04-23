@@ -19,8 +19,6 @@ resource "aws_security_group" "alb_sg" {
   }
 }
 
-
-
 resource "aws_security_group" "app_sg" {
   name        = "${var.proj_name}-app-sg"
   description = "Chi nhan traffic chuyen den tu Load Balancer"
