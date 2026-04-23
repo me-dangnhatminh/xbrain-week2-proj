@@ -2,7 +2,7 @@ module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.0.0"
 
-  name = "xrestaurant-vpc"
+  name = "${var.proj_name}-vpc"
   cidr = var.vpc_cidr
   azs  = var.azs
 
@@ -16,14 +16,9 @@ module "vpc" {
 
   enable_dns_hostnames = true
   enable_dns_support   = true
-
-  tags = {
-    Project     = "XRestaurant"
-    Environment = "Production"
-  }
 }
 
-resource "aws_vpc_endpoint" "s3" {
+resource "aws_vpc_endpoint" "vpc_endpoint_s3" {
   vpc_id            = module.vpc.vpc_id
   service_name      = "com.amazonaws.ap-southeast-1.s3"
   vpc_endpoint_type = "Gateway"

@@ -1,5 +1,5 @@
 resource "aws_ecr_repository" "backend" {
-  name                 = "xrestaurant-backend"
+  name                 = "${var.proj_name}-backend"
   image_tag_mutability = "MUTABLE"
   force_delete         = true
 
@@ -9,17 +9,17 @@ resource "aws_ecr_repository" "backend" {
 }
 
 resource "aws_ecs_cluster" "main" {
-  name = "xrestaurant-cluster"
+  name = "${var.proj_name}-cluster"
 }
 
 resource "aws_cloudwatch_log_group" "ecs_logs" {
-  name              = "/ecs/xrestaurant-backend"
+  name              = "/ecs/${var.proj_name}-backend"
   retention_in_days = 7
 }
 
 # IAM Role for ECS Task Execution (Pull image, Push Logs)
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "xrestaurant-ecs-execution-role"
+  name = "${var.proj_name}-ecs-execution-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -40,9 +40,26 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Cho phép ECS Execution Role được lấy chìa khoá từ Secrets Manager
+resource "aws_iam_role_policy" "ecs_secrets_access" {
+  name = "${var.proj_name}-secrets-access"
+  role = aws_iam_role.ecs_task_execution_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action   = ["secretsmanager:GetSecretValue"]
+        Effect   = "Allow"
+        Resource = [aws_secretsmanager_secret.backend_secrets.arn]
+      }
+    ]
+  })
+}
+
+
 # IAM Role for ECS Task (S3 Access)
 resource "aws_iam_role" "app_role" {
-  name = "xrestaurant-app-role"
+  name = "${var.proj_name}-app-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -59,7 +76,7 @@ resource "aws_iam_role" "app_role" {
 }
 
 resource "aws_iam_role_policy" "s3_access" {
-  name = "xrestaurant-s3-access"
+  name = "${var.proj_name}-s3-access"
   role = aws_iam_role.app_role.id
 
   policy = jsonencode({
@@ -72,7 +89,7 @@ resource "aws_iam_role_policy" "s3_access" {
           "s3:DeleteObject",
           "s3:ListBucket"
         ]
-        Effect   = "Allow"
+        Effect = "Allow"
         Resource = [
           "arn:aws:s3:::${var.s3_bucket}",
           "arn:aws:s3:::${var.s3_bucket}/*"
@@ -94,7 +111,7 @@ resource "aws_iam_role_policy" "s3_access" {
 
 # Load Balancer and Target Group
 resource "aws_lb" "main" {
-  name               = "xrestaurant-alb"
+  name               = "${var.proj_name}-alb"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [var.alb_sg_id]
@@ -103,7 +120,7 @@ resource "aws_lb" "main" {
 
 # Target Group needs target_type = "ip" for Fargate
 resource "aws_lb_target_group" "app_tg" {
-  name        = "xrestaurant-ecs-tg"
+  name        = "${var.proj_name}-ecs-tg"
   port        = 8080
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
@@ -130,7 +147,7 @@ resource "aws_lb_listener" "front_end" {
 }
 
 resource "aws_ecs_task_definition" "backend" {
-  family                   = "xrestaurant-backend-task"
+  family                   = "${var.proj_name}-backend-task"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
@@ -157,19 +174,21 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "FRONTEND_URL", value = var.cdn_base_url },
         { name = "S3_BUCKET", value = var.s3_bucket },
         { name = "AWS_REGION", value = "ap-southeast-1" },
-        { name = "CDN_BASE_URL", value = var.cdn_base_url },
-        { name = "MONGODB_URL", value = "mongodb://${var.db_username}:${var.db_password}@${var.db_endpoint}:27017/?tls=true&tlsCAFile=/app/global-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false" },
-        { name = "SECRET_KEY_ACCESS_TOKEN", value = var.secret_key_access_token },
-        { name = "SECRET_KEY_REFRESH_TOKEN", value = var.secret_key_refresh_token },
-        { name = "STRIPE_SECRET_KEY", value = var.stripe_secret_key },
-        { name = "STRIPE_ENPOINT_WEBHOOK_SECRET_KEY", value = var.stripe_webhook_secret },
-        { name = "STRIPE_CLI_WEBHOOK_SECRET", value = var.stripe_webhook_secret },
-        { name = "EMAIL_USER", value = var.email_user },
-        { name = "EMAIL_PASS", value = var.email_pass },
-        { name = "GOOGLE_CLIENT_ID", value = var.google_client_id },
-        { name = "GOOGLE_CLIENT_SECRET", value = var.google_client_secret },
-        { name = "GEMINI_API_KEY", value = var.gemini_api_key },
-        { name = "RESEND_API", value = var.resend_api }
+        { name = "CDN_BASE_URL", value = var.cdn_base_url }
+      ]
+      secrets = [
+        { name = "MONGODB_URL", valueFrom = "${aws_secretsmanager_secret.backend_secrets.arn}:MONGODB_URL::" },
+        { name = "SECRET_KEY_ACCESS_TOKEN", valueFrom = "${aws_secretsmanager_secret.backend_secrets.arn}:SECRET_KEY_ACCESS_TOKEN::" },
+        { name = "SECRET_KEY_REFRESH_TOKEN", valueFrom = "${aws_secretsmanager_secret.backend_secrets.arn}:SECRET_KEY_REFRESH_TOKEN::" },
+        { name = "STRIPE_SECRET_KEY", valueFrom = "${aws_secretsmanager_secret.backend_secrets.arn}:STRIPE_SECRET_KEY::" },
+        { name = "STRIPE_ENPOINT_WEBHOOK_SECRET_KEY", valueFrom = "${aws_secretsmanager_secret.backend_secrets.arn}:STRIPE_ENPOINT_WEBHOOK_SECRET_KEY::" },
+        { name = "STRIPE_CLI_WEBHOOK_SECRET", valueFrom = "${aws_secretsmanager_secret.backend_secrets.arn}:STRIPE_CLI_WEBHOOK_SECRET::" },
+        { name = "EMAIL_USER", valueFrom = "${aws_secretsmanager_secret.backend_secrets.arn}:EMAIL_USER::" },
+        { name = "EMAIL_PASS", valueFrom = "${aws_secretsmanager_secret.backend_secrets.arn}:EMAIL_PASS::" },
+        { name = "GOOGLE_CLIENT_ID", valueFrom = "${aws_secretsmanager_secret.backend_secrets.arn}:GOOGLE_CLIENT_ID::" },
+        { name = "GOOGLE_CLIENT_SECRET", valueFrom = "${aws_secretsmanager_secret.backend_secrets.arn}:GOOGLE_CLIENT_SECRET::" },
+        { name = "GEMINI_API_KEY", valueFrom = "${aws_secretsmanager_secret.backend_secrets.arn}:GEMINI_API_KEY::" },
+        { name = "RESEND_API", valueFrom = "${aws_secretsmanager_secret.backend_secrets.arn}:RESEND_API::" }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -184,11 +203,11 @@ resource "aws_ecs_task_definition" "backend" {
 }
 
 resource "aws_ecs_service" "backend_service" {
-  name            = "xrestaurant-ecs-service"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.backend.arn
-  desired_count   = 2
-  launch_type     = "FARGATE"
+  name                   = "${var.proj_name}-ecs-service"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.backend.arn
+  desired_count          = 2
+  launch_type            = "FARGATE"
   enable_execute_command = true
 
   network_configuration {
@@ -211,7 +230,7 @@ resource "aws_ecs_service" "backend_service" {
 # API GATEWAY (HTTPS PROXY FOR ALB)
 # ==========================================
 resource "aws_apigatewayv2_api" "backend_api" {
-  name          = "xrestaurant-api-gateway"
+  name          = "${var.proj_name}-api-gateway"
   protocol_type = "HTTP"
 }
 
@@ -234,3 +253,31 @@ resource "aws_apigatewayv2_stage" "default_stage" {
   name        = "$default"
   auto_deploy = true
 }
+
+# ==========================================
+# SECRETS MANAGER (Bảo mật API Keys)
+# ==========================================
+resource "aws_secretsmanager_secret" "backend_secrets" {
+  name_prefix             = "${var.proj_name}-backend-keys-"
+  description             = "Chứa toàn bộ API Keys nhạy cảm cho Backend"
+  recovery_window_in_days = 0 # Đặt bằng 0 để dễ dàng destroy lúc demo/làm bài tập
+}
+
+resource "aws_secretsmanager_secret_version" "backend_secrets_values" {
+  secret_id = aws_secretsmanager_secret.backend_secrets.id
+  secret_string = jsonencode({
+    MONGODB_URL                       = "mongodb://${var.db_username}:${var.db_password}@${var.db_endpoint}:27017/?tls=true&tlsCAFile=/app/global-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false"
+    SECRET_KEY_ACCESS_TOKEN           = var.secret_key_access_token
+    SECRET_KEY_REFRESH_TOKEN          = var.secret_key_refresh_token
+    STRIPE_SECRET_KEY                 = var.stripe_secret_key
+    STRIPE_ENPOINT_WEBHOOK_SECRET_KEY = var.stripe_webhook_secret
+    STRIPE_CLI_WEBHOOK_SECRET         = var.stripe_webhook_secret
+    EMAIL_USER                        = var.email_user
+    EMAIL_PASS                        = var.email_pass
+    GOOGLE_CLIENT_ID                  = var.google_client_id
+    GOOGLE_CLIENT_SECRET              = var.google_client_secret
+    GEMINI_API_KEY                    = var.gemini_api_key
+    RESEND_API                        = var.resend_api
+  })
+}
+

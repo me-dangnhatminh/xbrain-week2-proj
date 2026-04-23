@@ -1,5 +1,5 @@
 resource "aws_security_group" "alb_sg" {
-  name        = "xrestaurant-alb-sg"
+  name        = "${var.proj_name}-alb-sg"
   description = "Cho phep truy cap web (http/80) tu toan the internet"
   vpc_id      = var.vpc_id
 
@@ -22,7 +22,7 @@ resource "aws_security_group" "alb_sg" {
 
 
 resource "aws_security_group" "app_sg" {
-  name        = "xrestaurant-app-sg"
+  name        = "${var.proj_name}-app-sg"
   description = "Chi nhan traffic chuyen den tu Load Balancer"
   vpc_id      = var.vpc_id
 
@@ -43,7 +43,7 @@ resource "aws_security_group" "app_sg" {
 }
 
 resource "aws_security_group" "data_sg" {
-  name        = "xrestaurant-data-sg"
+  name        = "${var.proj_name}-data-sg"
   description = "Chi nhan traffic tu tang App (MySQL & Redis)"
   vpc_id      = var.vpc_id
 

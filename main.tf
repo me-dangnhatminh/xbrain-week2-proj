@@ -1,20 +1,30 @@
+# terraform {
+#   backend "s3" {
+#     bucket         = "xrestaurant-tfstate"
+#     key            = "terraform.state"
+#     region         = "ap-southeast-1"
+#     dynamodb_table = "xrestaurant-tfstate-lock"
+#   }
+# }
+
 provider "aws" {
-  region = "ap-southeast-1"
+  region = var.aws_region
 }
 
 module "networking" {
-  source   = "./aws/networking"
-  vpc_cidr = "10.0.0.0/16"
-  azs      = ["ap-southeast-1a", "ap-southeast-1b"]
+  source    = "./tf/networking"
+  proj_name = var.proj_name
 }
 
 module "security" {
-  source = "./aws/security"
-  vpc_id = module.networking.vpc_id
+  source    = "./tf/security"
+  proj_name = var.proj_name
+  vpc_id    = module.networking.vpc_id
 }
 
 module "compute" {
-  source          = "./aws/compute"
+  source          = "./tf/compute"
+  proj_name       = var.proj_name
   vpc_id          = module.networking.vpc_id
   public_subnets  = module.networking.public_subnets
   private_subnets = module.networking.private_subnets
@@ -40,13 +50,15 @@ module "compute" {
 }
 
 module "database" {
-  source             = "./aws/database"
-  database_subnets   = module.networking.database_subnets
-  data_sg_id         = module.security.data_sg_id
-  db_username        = var.db_username
-  db_password        = var.db_password
+  source           = "./tf/database"
+  proj_name        = var.proj_name
+  database_subnets = module.networking.database_subnets
+  data_sg_id       = module.security.data_sg_id
+  db_username      = var.db_username
+  db_password      = var.db_password
 }
 
 module "storage" {
-  source = "./aws/storage"
+  source    = "./tf/storage"
+  proj_name = var.proj_name
 }

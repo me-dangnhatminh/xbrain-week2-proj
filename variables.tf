@@ -1,3 +1,9 @@
+variable "proj_name" {
+  description = "Tên project"
+  type        = string
+  default     = "xrestaurant"
+}
+
 variable "aws_region" {
   description = "Region triển khai"
   type        = string

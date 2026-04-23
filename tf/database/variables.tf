@@ -1,3 +1,5 @@
+variable "proj_name" { type = string }
+
 variable "database_subnets" {
   type = list(string)
 }
