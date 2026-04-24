@@ -6,6 +6,3 @@ output "bucket_id" {
   value = aws_s3_bucket.s3_assets.id
 }
 
-output "dev_bucket_id" {
-  value = aws_s3_bucket.dev_assets.id
-}

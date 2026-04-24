@@ -293,8 +293,8 @@ export default function SupportChatCustomer() {
                                 <span className="font-semibold text-gray-800 text-xs line-clamp-1">
                                     Trợ lý AI
                                 </span>
-                                <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-medium">
-                                    AI Gemini
+                                <span className="text-[10px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-medium">
+                                    AWS Bedrock
                                 </span>
                             </div>
                             <p className="text-xs text-gray-500 line-clamp-1">

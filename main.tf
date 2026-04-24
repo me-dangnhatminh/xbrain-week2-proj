@@ -15,6 +15,8 @@ module "networking" {
   source     = "./tf/networking"
   proj_name  = var.proj_name
   aws_region = var.aws_region
+  vpc_cidr   = var.vpc_cidr
+  vpc_azs    = var.vpc_azs
 }
 
 module "security" {
@@ -64,3 +66,16 @@ module "storage" {
   source    = "./tf/storage"
   proj_name = var.proj_name
 }
+
+module "lambda" {
+  source     = "./tf/lambda"
+  proj_name  = var.proj_name
+  aws_region = var.aws_region
+
+  bedrock_kb_id    = var.bedrock_kb_id
+  bedrock_model_arn = var.bedrock_model_arn
+
+  api_gateway_id            = module.compute.api_gateway_id
+  api_gateway_execution_arn = module.compute.api_gateway_execution_arn
+}
+

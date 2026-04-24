@@ -226,8 +226,8 @@ export default function UnifiedChatPage() {
                                 >
                                     Trợ lý AI
                                 </span>
-                                <span className="text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
-                                    AI Gemini
+                                <span className="text-[10px] bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full font-medium">
+                                    AWS Bedrock
                                 </span>
                             </div>
                             <p className="text-xs text-muted-foreground line-clamp-1">
@@ -449,8 +449,8 @@ export default function UnifiedChatPage() {
                             </button>
                         </div>
                         <p className="text-center text-xs text-muted-foreground mt-2 flex items-center justify-center gap-1">
-                            <Sparkles size={12} className="text-violet-500" />
-                            Powered by Google Gemini AI
+                            <Sparkles size={12} className="text-amber-500" />
+                            Powered by Amazon Bedrock
                         </p>
                     </div>
                 </main>

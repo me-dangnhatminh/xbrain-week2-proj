@@ -354,7 +354,7 @@ export const SupportChatProvider = ({ children }) => {
             });
 
             const response = await Axios({
-                ...SummaryApi.chat_message,
+                ...SummaryApi.bedrock_chat,
                 data: { message: trimmed, history },
             });
 

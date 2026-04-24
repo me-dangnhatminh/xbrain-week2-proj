@@ -154,7 +154,7 @@ export default function AiChatBox({ isOpen = false, onClose }) {
                         <div className="flex items-center gap-1.5 mt-0.5">
                             <span className="w-1.5 h-1.5 bg-green-400 rounded-full shadow shadow-green-400/60" />
                             <p className="text-violet-200 text-[10.5px] tracking-wide">
-                                EatEase · Powered by Gemini
+                                EatEase · Powered by Bedrock
                             </p>
                         </div>
                     </div>
@@ -252,7 +252,7 @@ export default function AiChatBox({ isOpen = false, onClose }) {
                             </button>
                         </div>
                         <p className="text-center text-[10px] mt-1.5 text-muted-foreground">
-                            Powered by Google Gemini AI
+                            Powered by Amazon Bedrock
                         </p>
                     </div>
                 </>

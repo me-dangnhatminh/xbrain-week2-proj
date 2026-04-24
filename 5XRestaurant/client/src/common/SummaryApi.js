@@ -226,9 +226,14 @@ const SummaryApi = {
         method: 'put'
     },
 
-    // AI Chat
+    // AI Chat (Legacy — Gemini via Backend)
     chat_message: {
         url: '/api/chat/message',
+        method: 'post'
+    },
+    // AI Chat (Bedrock — via Lambda)
+    bedrock_chat: {
+        url: '/api/bedrock-chat',
         method: 'post'
     },
 

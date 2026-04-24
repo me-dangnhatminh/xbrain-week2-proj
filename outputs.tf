@@ -13,12 +13,14 @@ output "ecr_repository_url" {
   value       = module.compute.ecr_repository_url
 }
 
-output "eatease_dev_s3_bucket" {
-  description = "Ten S3 Bucket danh rieng cho mang Local Dev"
-  value       = module.storage.dev_bucket_id
-}
 
 output "api_gateway_https_url" {
   description = "Duong link HTTPS an toan cua Backend thong qua API Gateway proxy"
   value       = module.compute.api_gateway_url
 }
+
+output "bedrock_chat_lambda" {
+  description = "Ten Lambda function cho Bedrock AI Chat"
+  value       = module.lambda.lambda_function_name
+}
+
