@@ -4,7 +4,7 @@ module "vpc" {
 
   name = "${var.proj_name}-vpc"
   cidr = var.vpc_cidr
-  azs  = var.azs
+  azs  = var.vpc_azs
 
   public_subnets   = ["10.0.1.0/24", "10.0.2.0/24"]
   private_subnets  = ["10.0.11.0/24", "10.0.12.0/24"]
@@ -20,7 +20,7 @@ module "vpc" {
 
 resource "aws_vpc_endpoint" "vpc_endpoint_s3" {
   vpc_id            = module.vpc.vpc_id
-  service_name      = "com.amazonaws.us-east-1.s3"
+  service_name      = "com.amazonaws.${var.aws_region}.s3"
   vpc_endpoint_type = "Gateway"
   route_table_ids   = module.vpc.private_route_table_ids
 }
