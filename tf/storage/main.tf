@@ -130,12 +130,24 @@ resource "aws_s3_bucket_lifecycle_configuration" "assets_lifecycle" {
     # Xóa các file cũ hơn 90 ngày
     noncurrent_version_expiration {
       noncurrent_days           = 90
-      newer_noncurrent_versions = true
     }
 
     # Dọn các mảng file upload dở dang (multipart upload)
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
     }
+  }
+}
+
+# ==========================================
+# CONTAINER REGISTRY (Lưu trữ Docker Image)
+# ==========================================
+resource "aws_ecr_repository" "backend" {
+  name                 = "${var.proj_name}-backend"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
   }
 }

@@ -1,6 +1,6 @@
 output "alb_public_url" {
   description = "Đường link dùng để vào website"
-  value       = "http://${module.compute.alb_dns_name}"
+  value       = "http://${module.networking.alb_dns_name}"
 }
 
 output "cloudfront_cdn_url" {
@@ -10,13 +10,13 @@ output "cloudfront_cdn_url" {
 
 output "ecr_repository_url" {
   description = "Kho ECR chứa Container Image"
-  value       = module.compute.ecr_repository_url
+  value       = module.storage.ecr_repository_url
 }
 
 
 output "api_gateway_https_url" {
   description = "Duong link HTTPS an toan cua Backend thong qua API Gateway proxy"
-  value       = module.compute.api_gateway_url
+  value       = module.networking.api_gateway_url
 }
 
 output "bedrock_chat_lambda" {

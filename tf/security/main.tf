@@ -60,3 +60,30 @@ resource "aws_security_group" "data_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
+
+# ==========================================
+# SECRETS MANAGER (Bảo mật API Keys)
+# ==========================================
+resource "aws_secretsmanager_secret" "backend_secrets" {
+  name_prefix             = "${var.proj_name}-backend-keys-"
+  description             = "Chứa toàn bộ API Keys nhạy cảm cho Backend"
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "backend_secrets_values" {
+  secret_id = aws_secretsmanager_secret.backend_secrets.id
+  secret_string = jsonencode({
+    MONGODB_URL                       = "mongodb://${var.db_username}:${var.db_password}@${var.db_endpoint}:27017/?tls=true&tlsCAFile=/app/global-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false"
+    SECRET_KEY_ACCESS_TOKEN           = var.secret_key_access_token
+    SECRET_KEY_REFRESH_TOKEN          = var.secret_key_refresh_token
+    STRIPE_SECRET_KEY                 = var.stripe_secret_key
+    STRIPE_ENPOINT_WEBHOOK_SECRET_KEY = var.stripe_webhook_secret
+    STRIPE_CLI_WEBHOOK_SECRET         = var.stripe_webhook_secret
+    EMAIL_USER                        = var.email_user
+    EMAIL_PASS                        = var.email_pass
+    GOOGLE_CLIENT_ID                  = var.google_client_id
+    GOOGLE_CLIENT_SECRET              = var.google_client_secret
+    GEMINI_API_KEY                    = var.gemini_api_key
+    RESEND_API                        = var.resend_api
+  })
+}

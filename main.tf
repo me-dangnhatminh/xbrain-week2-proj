@@ -17,30 +17,18 @@ module "networking" {
   aws_region = var.aws_region
   vpc_cidr   = var.vpc_cidr
   vpc_azs    = var.vpc_azs
+  alb_sg_id  = module.security.alb_sg_id
 }
 
 module "security" {
   source    = "./tf/security"
   proj_name = var.proj_name
   vpc_id    = module.networking.vpc_id
-}
 
-module "compute" {
-  source          = "./tf/compute"
-  proj_name       = var.proj_name
-  vpc_region      = var.aws_region
-  vpc_id          = module.networking.vpc_id
-  public_subnets  = module.networking.public_subnets
-  private_subnets = module.networking.private_subnets
-  alb_sg_id       = module.security.alb_sg_id
-  app_sg_id       = module.security.app_sg_id
-  s3_bucket       = module.storage.bucket_id
-  cdn_base_url    = "https://${module.storage.cloudfront_domain_name}"
-  db_endpoint     = module.database.docdb_endpoint
-  db_username     = var.db_username
-  db_password     = var.db_password
-
-  # App Secrets
+  db_endpoint = module.database.docdb_endpoint
+  db_username = var.db_username
+  db_password = var.db_password
+  
   secret_key_access_token  = var.secret_key_access_token
   secret_key_refresh_token = var.secret_key_refresh_token
   stripe_secret_key        = var.stripe_secret_key
@@ -51,6 +39,20 @@ module "compute" {
   google_client_secret     = var.google_client_secret
   gemini_api_key           = var.gemini_api_key
   resend_api               = var.resend_api
+}
+
+module "compute" {
+  source          = "./tf/compute"
+  proj_name       = var.proj_name
+  vpc_region      = var.aws_region
+  vpc_id          = module.networking.vpc_id
+  private_subnets = module.networking.private_subnets
+  app_sg_id       = module.security.app_sg_id
+  app_tg_arn      = module.networking.app_tg_arn
+  s3_bucket           = module.storage.bucket_id
+  cdn_base_url        = "https://${module.storage.cloudfront_domain_name}"
+  backend_secrets_arn = module.security.backend_secrets_arn
+  ecr_repository_url  = module.storage.ecr_repository_url
 }
 
 module "database" {
@@ -75,7 +77,8 @@ module "lambda" {
   bedrock_kb_id    = var.bedrock_kb_id
   bedrock_model_arn = var.bedrock_model_arn
 
-  api_gateway_id            = module.compute.api_gateway_id
-  api_gateway_execution_arn = module.compute.api_gateway_execution_arn
+  api_gateway_id            = module.networking.api_gateway_id
+  api_gateway_execution_arn = module.networking.api_gateway_execution_arn
 }
+
 

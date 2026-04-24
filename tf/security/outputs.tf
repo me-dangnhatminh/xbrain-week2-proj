@@ -8,3 +8,6 @@ output "data_sg_id" {
   value = aws_security_group.data_sg.id
 }
 
+output "backend_secrets_arn" {
+  value = aws_secretsmanager_secret.backend_secrets.arn
+}
