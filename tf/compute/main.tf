@@ -85,7 +85,6 @@ resource "aws_iam_role_policy" "ecs_secrets_access" {
   })
 }
 
-
 # IAM Role for ECS Task (S3 Access)
 resource "aws_iam_role" "app_role" {
   name = "${var.proj_name}-app-role"

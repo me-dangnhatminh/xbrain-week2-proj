@@ -72,16 +72,6 @@ variable "resend_api" {
   sensitive   = true
 }
 
-# ============================================================
-# Bedrock Knowledge Base (for Lambda AI Chat)
-# ============================================================
-variable "bedrock_kb_id" {
-  description = "Bedrock Knowledge Base ID (created manually in AWS Console)"
-  type        = string
-}
-
-variable "bedrock_model_arn" {
-  description = "Bedrock model ARN for RetrieveAndGenerate"
-  type        = string
-}
+variable "bedrock_kb_id" { type = string }
+variable "bedrock_model_arn" { type = string }
 

@@ -105,3 +105,37 @@ resource "aws_s3_object" "frontend_assets" {
     "application/octet-stream"
   )
 }
+
+resource "aws_s3_bucket_versioning" "assets_versioning" {
+  bucket = aws_s3_bucket.s3_assets.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "assets_lifecycle" {
+  bucket = aws_s3_bucket.s3_assets.id
+
+  rule {
+    id     = "clean_up_old_versions"
+    status = "Enabled"
+
+    # Chuyển các file cũ sang lớp rẻ hơn Standard-IA) sau 30 ngày
+    noncurrent_version_transition {
+      noncurrent_days = 30
+      storage_class   = "STANDARD_IA"
+    }
+
+    # Xóa các file cũ hơn 90 ngày
+    noncurrent_version_expiration {
+      noncurrent_days           = 90
+      newer_noncurrent_versions = true
+    }
+
+    # Dọn các mảng file upload dở dang (multipart upload)
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+}
