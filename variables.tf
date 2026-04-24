@@ -1,23 +1,13 @@
-variable "proj_name" {
-  description = "Tên project"
-  type        = string
-  default     = "xrestaurant"
-}
+variable "proj_name" { type = string }
+variable "aws_region" { type = string }
+variable "vpc_cidr" { type = string }
+variable "vpc_azs" { type = list(string) }
 
-variable "aws_region" {
-  description = "Region triển khai"
-  type        = string
-}
-
-variable "db_username" {
-  description = "Tài khoản đăng nhập Database"
-  type        = string
-}
+variable "db_username" { type = string }
 
 variable "db_password" {
-  description = "Mật khẩu Database"
-  type        = string
-  sensitive   = true
+  type      = string
+  sensitive = true
 }
 
 # ============================================================

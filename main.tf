@@ -12,8 +12,9 @@ provider "aws" {
 }
 
 module "networking" {
-  source    = "./tf/networking"
-  proj_name = var.proj_name
+  source     = "./tf/networking"
+  proj_name  = var.proj_name
+  aws_region = var.aws_region
 }
 
 module "security" {
