@@ -46,3 +46,4 @@ Thumbs.db
 .env.local
 .env.*.local
 *.pem
+venv
