@@ -1,398 +1,241 @@
-# GeekBrain AI System - Demo Script L1
+# GeekBrain AI System — Full Demo Script (L1–L4)
 
 ## Chuẩn Bị Demo (5 phút trước)
 
-### 1. Kiểm Tra Services
+### 1. Kiểm Tra và Khởi Động Services
 
 ```bash
-# Check API server đang chạy
-ps aux | grep "main.py"
+# Terminal 1: Start Monitoring API (port 8000)
+cd w4
+source venv/bin/activate
+python monitoring_api.py &
 
-# Nếu chưa chạy, start server
+# Terminal 2: Start Main API (port 8001)
 cd w4/src
+source ../venv/bin/activate
 python main.py &
 
-# Đợi 5 giây để server khởi động
+# Đợi 5 giây để cả 2 servers khởi động
 sleep 5
-
-# Test health check
-curl http://localhost:8001/
 ```
 
-**Expected output:**
-```json
-{
-  "status": "healthy",
-  "service": "GeekBrain AI System",
-  "level": "L1",
-  "knowledge_base_configured": true
-}
+### 2. Verify Tất Cả Services Running
+
+```bash
+# Health check — Main API
+curl -s http://localhost:8001/health | jq
+
+# Expected:
+# { "status": "healthy", "knowledge_base_configured": true }
+
+# Health check — Monitoring API
+curl -s http://localhost:8000/services | jq
+
+# Expected: ["PaymentGW", "NotificationSvc", ...]
 ```
 
-### 2. Set Environment Variables
+### 3. Set Environment Variables (nếu chưa set)
 
 ```bash
 export BEDROCK_KB_ID="8IT6QXNDFJ"
 export AWS_DEFAULT_REGION="us-east-1"
 ```
 
-### 3. Chuẩn Bị Terminal Windows
+---
 
-- **Terminal 1:** API server logs
-- **Terminal 2:** Demo commands
-- **Browser:** Mở Postman hoặc chuẩn bị curl commands
+## Demo Flow (10–12 phút)
 
-## Demo Flow (10-12 phút)
+### Part 1: Giới Thiệu Hệ Thống (1 phút)
 
-### Part 1: Giới Thiệu Hệ Thống (2 phút)
+> "Hôm nay tôi sẽ demo GeekBrain AI System — hệ thống AI Q&A có 4 levels:
+> - L1: Simple RAG — truy vấn Knowledge Base
+> - L2: Multi-Source RAG — xử lý xung đột tài liệu
+> - L3: Tool-Augmented — query database & monitoring API
+> - L4: Memory-Enabled — hội thoại nhiều lượt, giải quyết đại từ"
 
-**Script:**
-> "Chào mọi người, hôm nay tôi sẽ demo GeekBrain AI System - một hệ thống AI trả lời câu hỏi về GeekBrain fintech startup.
-> 
-> Hệ thống có 4 levels:
-> - L1: Simple RAG - retrieve từ knowledge base
-> - L2: Multi-Source RAG - tổng hợp nhiều nguồn
-> - L3: Tool-Augmented RAG - query database và APIs
-> - L4: Memory-Enabled RAG - multi-turn conversations
-> 
-> Hôm nay tôi sẽ demo L1 - Simple RAG."
+---
 
-**Show Architecture Diagram:**
-```
-User → API → RAG Pipeline → Bedrock KB → OpenSearch → S3 (36 docs)
-                    ↓
-              Claude Sonnet
-                    ↓
-              Response + Citations
-```
+### Part 2: Demo L1 — Simple RAG (2 phút)
 
-### Part 2: Demo Query 1 - Team Information (2 phút)
-
-**Query:** "Who is the Team Platform lead?"
+**Query 1:** Team information
 
 ```bash
-curl -X POST http://localhost:8001/query \
+curl -s -X POST http://localhost:8001/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Who is the Team Platform lead?", "level": "L1"}' | jq
+```
+
+> ✅ Expected: "Alex Chen" với source citation `team_platform.md`
+> ✅ Response time: < 5 giây
+
+**Query 2:** Policy information
+
+```bash
+curl -s -X POST http://localhost:8001/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is the deployment freeze window?", "level": "L1"}' | jq
+```
+
+> ✅ Expected: "Friday 18:00 đến Monday 08:00" từ `deployment_policy.md`
+
+---
+
+### Part 3: Demo L2 — Conflict Resolution (2 phút)
+
+**Query:** Version conflict
+
+```bash
+curl -s -X POST http://localhost:8001/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is PaymentGW'\''s API rate limit?", "level": "L2"}' | jq
+```
+
+> ✅ Expected: **1,000 req/min** (v2), ghi chú v1 là 500 req/min đã bị supersede
+> "Hệ thống phát hiện xung đột giữa api_reference_v1.md (500) và v2.md (1000), ưu tiên phiên bản mới hơn."
+
+---
+
+### Part 4: Demo L3 — Tool-Augmented RAG (3 phút)
+
+**Query 1:** Historical database query (exact numbers)
+
+```bash
+curl -s -X POST http://localhost:8001/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What was PaymentGW'\''s total infrastructure cost in Q1 2026?", "level": "L3"}' | jq
+```
+
+> ✅ Expected: **$16,500** (chính xác từ database tool)
+> ✅ `tools_used: ["query_database"]`
+> "Lưu ý: con số $16,500 lấy TRỰC TIẾP từ database bằng SQL query, không phải từ documents."
+
+**Query 2:** Live monitoring API
+
+```bash
+curl -s -X POST http://localhost:8001/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is PaymentGW'\''s current p99 latency?", "level": "L3"}' | jq
+```
+
+> ✅ Expected: ~185ms (real-time từ monitoring API)
+> ✅ `tools_used: ["get_service_metrics"]`
+
+**Query 3:** Multi-tool (database + API)
+
+```bash
+curl -s -X POST http://localhost:8001/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Is NotificationSvc meeting its SLA targets?", "level": "L3"}' | jq
+```
+
+> ✅ Expected: ❌ Not meeting SLA — current p99 3200ms > target 2000ms
+> ✅ `tools_used: ["query_database", "get_service_metrics"]`
+> "Hệ thống dùng CẢ HAI tools: database cho SLA target, monitoring API cho current metrics, rồi so sánh."
+
+---
+
+### Part 5: Demo L4 — Memory-Enabled Multi-Turn (3 phút)
+
+> "Đây là phần quan trọng nhất — hội thoại 4 lượt với pronoun resolution."
+
+**Turn 1:** Establish entity
+
+```bash
+curl -s -X POST http://localhost:8001/query \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "Who is the Team Platform lead?",
-    "top_k": 5
+    "query": "Service nào có chi phí cao nhất tháng 3/2026?",
+    "level": "L4",
+    "session_id": "demo-session-001"
   }' | jq
 ```
 
-**Expected Response:**
-```json
-{
-  "answer": "Theo thông tin trong team_platform.md, Team Platform lead là Alex Chen.",
-  "sources": [
-    "team_platform.md",
-    "service_authsvc.md",
-    "service_reportingsvc.md"
-  ],
-  "chunks_used": [...],
-  "processing_time": 1.947,
-  "level": "L1"
-}
-```
+> ✅ Expected: "PaymentGW với $7,500"
 
-**Giải Thích:**
-> "Như các bạn thấy:
-> 1. Hệ thống trả lời đúng: Alex Chen
-> 2. Có source citation: team_platform.md
-> 3. Response time: ~2 giây
-> 4. Câu trả lời bằng tiếng Việt như yêu cầu"
-
-### Part 3: Demo Query 2 - Policy Information (2 phút)
-
-**Query:** "What is the deployment freeze window?"
+**Turn 2:** Pronoun "nó" → PaymentGW
 
 ```bash
-curl -X POST http://localhost:8001/query \
+curl -s -X POST http://localhost:8001/query \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "What is the deployment freeze window?",
-    "top_k": 5
+    "query": "Tại sao chi phí của nó tăng đột biến?",
+    "level": "L4",
+    "session_id": "demo-session-001"
   }' | jq
 ```
 
-**Expected Response:**
-```json
-{
-  "answer": "Deployment freeze window là từ Friday 18:00 đến Monday 08:00. Trong thời gian này, không được phép deploy lên production để đảm bảo stability trong weekend.",
-  "sources": [
-    "deployment_policy.md",
-    "incident_response_policy.md"
-  ],
-  "processing_time": 2.556,
-  "level": "L1"
-}
-```
+> ✅ Expected: Giải thích liên quan đến PaymentGW (postmortem, scaling event)
+> "Hệ thống resolve 'nó' = PaymentGW từ Turn 1."
 
-**Giải Thích:**
-> "Query này phức tạp hơn:
-> 1. Hệ thống tìm thông tin từ deployment_policy.md
-> 2. Trả lời chính xác: Friday 18:00 - Monday 08:00
-> 3. Có giải thích thêm về lý do
-> 4. Processing time vẫn < 3 giây"
-
-### Part 4: Demo Query 3 - Service Information (2 phút)
-
-**Query:** "What services does GeekBrain operate?"
+**Turn 3:** Implicit entity
 
 ```bash
-curl -X POST http://localhost:8001/query \
+curl -s -X POST http://localhost:8001/query \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "What services does GeekBrain operate?",
-    "top_k": 5
+    "query": "Team nào chịu trách nhiệm?",
+    "level": "L4",
+    "session_id": "demo-session-001"
   }' | jq
 ```
 
-**Expected Response:**
-```json
-{
-  "answer": "GeekBrain vận hành 6 production services: PaymentGW, AuthSvc, NotificationSvc, ReportingSvc, UserProfileSvc, và TransactionSvc. Mỗi service có team riêng chịu trách nhiệm.",
-  "sources": [
-    "service_paymentgw.md",
-    "service_authsvc.md",
-    "service_notificationsvc.md",
-    "team_platform.md"
-  ],
-  "processing_time": 2.134,
-  "level": "L1"
-}
-```
+> ✅ Expected: "Team Platform, do Alex Chen lãnh đạo"
 
-**Giải Thích:**
-> "Query này yêu cầu tổng hợp thông tin:
-> 1. Hệ thống retrieve từ nhiều service documents
-> 2. List đầy đủ 6 services
-> 3. Sources từ nhiều files khác nhau
-> 4. Đây là bước đầu của multi-source retrieval (sẽ improve ở L2)"
-
-### Part 5: Demo Error Handling (1 phút)
-
-**Query:** Empty query
+**Turn 4:** Full context chain
 
 ```bash
-curl -X POST http://localhost:8001/query \
+curl -s -X POST http://localhost:8001/query \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "",
-    "top_k": 5
+    "query": "Deadline review postmortem đã qua chưa?",
+    "level": "L4",
+    "session_id": "demo-session-001"
   }' | jq
 ```
 
-**Expected Response:**
-```json
-{
-  "detail": "Query cannot be empty"
-}
-```
+> ✅ Expected: Trả lời về deadline postmortem PaymentGW
 
-**Giải Thích:**
-> "Hệ thống có error handling:
-> 1. Validate input
-> 2. Trả về error message rõ ràng
-> 3. Không crash"
+> "Qua 4 turns, hệ thống duy trì context liên tục: PaymentGW → chi phí → team → postmortem. Tất cả đều dùng cùng session_id."
 
-### Part 6: Show Test Results (2 phút)
+---
 
-**Run Unit Tests:**
+### Part 6: Show Test Results (1 phút)
+
 ```bash
+# Unit tests (không cần AWS)
 cd w4
-./venv/bin/python -m pytest tests/unit/test_rag_pipeline.py -v --tb=short
+source venv/bin/activate
+python -m pytest tests/unit/ -v --tb=short | tail -5
+# → 81 passed ✅
 ```
 
-**Show output:**
-```
-18 passed in 0.55s
-```
+> "81 unit tests pass, bao gồm tests cho memory, tools, và RAG pipeline."
 
-**Giải Thích:**
-> "Unit tests coverage:
-> - Retrieve functionality
-> - Chunk extraction
-> - LLM integration
-> - Error handling
-> - All 18 tests passed"
-
-**Run Integration Tests:**
-```bash
-BEDROCK_KB_ID="8IT6QXNDFJ" ./venv/bin/python -m pytest tests/integration/test_l1_integration.py::TestL1Integration -v --tb=short
-```
-
-**Show output:**
-```
-8 passed, 1 failed in 34.24s
-```
-
-**Giải Thích:**
-> "Integration tests:
-> - Test với real AWS services
-> - 8/9 tests passed
-> - 1 test failed do response time hơi chậm (5.4s vs 5s target)
-> - Đây là network latency, không ảnh hưởng functionality"
-
-### Part 7: Architecture Deep Dive (1 phút)
-
-**Show Code:**
-```python
-# w4/src/rag_pipeline.py - Core logic
-
-def retrieve_and_generate(self, query: str, top_k: int = 5) -> Response:
-    # 1. Retrieve chunks from Bedrock KB
-    chunks = self.retrieve(query, top_k)
-    
-    # 2. Format context
-    context = self._format_chunks_as_context(chunks)
-    
-    # 3. Call LLM
-    system_prompt = self._get_l1_system_prompt()
-    response = self.bedrock_runtime.invoke_model(
-        modelId=self.model_id,
-        body=json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 1000,
-            "system": system_prompt,
-            "messages": [{"role": "user", "content": f"{context}\n\nCâu hỏi: {query}"}]
-        })
-    )
-    
-    # 4. Parse and return
-    return Response(answer=answer, sources=sources, ...)
-```
-
-**Giải Thích:**
-> "Code rất clean:
-> 1. Retrieve chunks từ Bedrock KB
-> 2. Format context với sources
-> 3. Call Claude Sonnet với system prompt
-> 4. Parse response và return
-> 
-> Tất cả đều có error handling và logging."
+---
 
 ## Q&A Preparation
 
-### Expected Questions & Answers
+| Câu Hỏi | Trả Lời |
+|----------|---------|
+| Tại sao dùng Window Memory? | Bounded context (5 turns), không overflow, đủ cho demo 4-turn. Query Rewriting cần thêm 1 LLM call mỗi turn → gấp đôi latency. |
+| Cost per query? | ~$0.003–0.015 (KB retrieve + Claude Sonnet inference). 1000 queries/day ≈ $3–15/day. |
+| Sao response time L3 lâu hơn L1? | L3 có thêm tool execution loop: LLM quyết định tool → execute → gửi kết quả lại LLM → generate. Mỗi iteration ~2-3s. |
+| Pronoun resolution hoạt động sao? | Không dùng NLP riêng — inject conversation history vào system prompt, Claude tự resolve "nó"/"its" dựa trên context. |
+| Production readiness? | ✅ Functional, ✅ Tested. Cần thêm: rate limiting, authentication, CloudWatch monitoring, DynamoDB for persistent sessions. |
 
-**Q: Tại sao response time có khi > 5s?**
-> A: "Có 3 factors:
-> 1. Bedrock KB retrieve: ~0.5-1s
-> 2. LLM inference: ~1-3s (depends on context size)
-> 3. Network latency: ~0.1-0.5s
-> 
-> Có thể optimize bằng cách:
-> - Reduce top_k (5 → 3)
-> - Use faster model (Haiku)
-> - Add caching layer"
+---
 
-**Q: Làm sao đảm bảo accuracy?**
-> A: "3 mechanisms:
-> 1. System prompt: chỉ dùng thông tin từ context
-> 2. Source citations: force LLM cite sources
-> 3. Testing: 18 unit tests + 9 integration tests verify correctness"
+## Fallback Plan
 
-**Q: Knowledge Base có bao nhiêu documents?**
-> A: "36 markdown documents covering:
-> - 6 services (PaymentGW, AuthSvc, etc.)
-> - 3 teams (Platform, Commerce, Data)
-> - Policies (deployment, incident response)
-> - Postmortems
-> - API references (v1, v2)"
+Nếu live demo fail:
+1. **Backup screenshots** trong Evidence Pack (`docs/W4_evidence.md`)
+2. **Show test output**: `python -m pytest tests/integration/ -v -s`
+3. **Show architecture diagram**: `docs/architecture_diagram.md`
 
-**Q: Tại sao dùng Bedrock KB thay vì tự build?**
-> A: "Managed service benefits:
-> 1. No need to manage OpenSearch cluster
-> 2. Auto-scaling
-> 3. Built-in chunking strategies
-> 4. Integrated with Bedrock LLMs
-> 5. Focus on application logic, not infrastructure"
+---
 
-**Q: L2, L3, L4 khác gì L1?**
-> A: "
-> - L2: Multi-source retrieval + conflict resolution (top_k=10, handle version conflicts)
-> - L3: Add tools (database queries, monitoring API calls)
-> - L4: Add memory (multi-turn conversations, pronoun resolution)"
+## Checklist Sau Demo
 
-**Q: Cost estimate?**
-> A: "Per query:
-> - Bedrock KB retrieve: ~$0.0001
-> - Claude Sonnet inference: ~$0.003-0.015 (depends on tokens)
-> - OpenSearch: included in KB pricing
-> - Total: ~$0.003-0.015 per query
-> 
-> For 1000 queries/day: ~$3-15/day"
-
-**Q: Production readiness?**
-> A: "Current status:
-> ✅ Functional: Yes
-> ✅ Tested: 18 unit + 8 integration tests
-> ✅ Error handling: Yes
-> ⚠️ Performance: Mostly < 5s (need optimization)
-> ❌ Monitoring: Need to add (CloudWatch, X-Ray)
-> ❌ Rate limiting: Need to add
-> ❌ Authentication: Need to add
-> 
-> Ready for demo, need hardening for production."
-
-## Backup Plan
-
-### If Live Demo Fails
-
-**Option 1: Use Screenshots**
-- Screenshot 1: Team Platform lead query response
-- Screenshot 2: Deployment freeze window query response
-- Screenshot 3: Test results (18 passed)
-
-**Option 2: Use Recorded Video**
-- Pre-record demo queries
-- Show video if live demo fails
-
-**Option 3: Show Test Output**
-```bash
-# Show integration test output (has actual responses)
-cat w4/tests/integration/test_output.log
-```
-
-## Post-Demo Checklist
-
-- [ ] Stop API server: `pkill -f "python main.py"`
-- [ ] Commit Evidence Pack: `git add w4/docs/ && git commit -m "Add L1 evidence"`
+- [ ] Stop servers: `pkill -f "python main.py" && pkill -f "python monitoring_api.py"`
+- [ ] Commit: `git add w4/ && git commit -m "W4 GeekBrain AI System - L1 to L4 complete"`
 - [ ] Post commit link to Slack
-- [ ] Answer any follow-up questions
-
-## Files to Have Open
-
-1. **Terminal 1:** API server running
-2. **Terminal 2:** Demo commands ready
-3. **Browser Tab 1:** Architecture diagram
-4. **Browser Tab 2:** GitHub repo (for code walkthrough)
-5. **Editor:** `w4/src/rag_pipeline.py` (for code explanation)
-6. **Backup:** Screenshots folder
-
-## Time Management
-
-| Section | Time | Cumulative |
-|---------|------|------------|
-| Introduction | 2 min | 2 min |
-| Query 1 | 2 min | 4 min |
-| Query 2 | 2 min | 6 min |
-| Query 3 | 2 min | 8 min |
-| Error Handling | 1 min | 9 min |
-| Test Results | 2 min | 11 min |
-| Architecture | 1 min | 12 min |
-| **Total** | **12 min** | |
-
-Reserve 3-5 minutes for Q&A.
-
-## Success Criteria
-
-Demo is successful if:
-- ✅ All 3 queries return correct answers
-- ✅ Source citations are shown
-- ✅ Response times are reasonable (< 6s)
-- ✅ Error handling works
-- ✅ Test results shown (18 unit tests passed)
-- ✅ Architecture explained clearly
-
-Good luck! 🚀

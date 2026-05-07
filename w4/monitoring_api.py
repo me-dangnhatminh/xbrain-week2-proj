@@ -295,3 +295,13 @@ def get_incidents_by_service(service_name: str):
     if service_name not in SERVICES:
         raise HTTPException(status_code=404, detail=f"Service '{service_name}' not found. Available: {SERVICES}")
     return [inc for inc in INCIDENTS if inc["service"] == service_name]
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "monitoring_api:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True
+    )

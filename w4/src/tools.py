@@ -313,14 +313,20 @@ class ListServicesTool:
 class IncidentHistoryTool:
     """Tool for querying incident history from database."""
     
-    def __init__(self, db_tool: DatabaseQueryTool):
+    def __init__(self, db_tool: "DatabaseQueryTool" = None, db_path: str = None):
         """
         Initialize incident history tool.
         
         Args:
-            db_tool: DatabaseQueryTool instance for executing queries
+            db_tool: DatabaseQueryTool instance (preferred)
+            db_path: Path to SQLite database (alternative, creates a DatabaseQueryTool internally)
         """
-        self.db_tool = db_tool
+        if db_tool is not None:
+            self.db_tool = db_tool
+        elif db_path is not None:
+            self.db_tool = DatabaseQueryTool(db_path=db_path)
+        else:
+            raise ValueError("Either db_tool or db_path must be provided")
     
     def get_incidents(self, service_name: str = None) -> ToolResult:
         """
@@ -333,9 +339,9 @@ class IncidentHistoryTool:
             ToolResult with incident records or error
         """
         if service_name:
-            sql = f"SELECT * FROM incidents WHERE service = '{service_name}' ORDER BY occurred_at DESC"
+            sql = f"SELECT * FROM incidents WHERE service = '{service_name}' ORDER BY date DESC"
         else:
-            sql = "SELECT * FROM incidents ORDER BY occurred_at DESC LIMIT 20"
+            sql = "SELECT * FROM incidents ORDER BY date DESC LIMIT 20"
         
         return self.db_tool.execute_query(sql)
     
@@ -517,16 +523,53 @@ class CompareServicesTool:
 class ToolExecutor:
     """Orchestrates tool execution."""
     
-    def __init__(self, tools: List[Any]):
+    # Map from tool name to the method to call on the tool instance
+    _METHOD_MAP: Dict[str, str] = {
+        "query_database": "execute_query",
+        "get_service_metrics": "get_metrics",
+        "get_service_status": "get_status",
+        "list_services": "list_services",
+        "get_incident_history": "get_incidents",
+        "get_team_info": "get_team_info",
+        "compare_services": "compare_services",
+    }
+
+    def __init__(self, tools: List[Any] = None):
         """
         Initialize tool executor.
-        
+
+        Can be used in two ways:
+        1. Pass a list of tool instances at creation time.
+        2. Call register_tool() to add tools individually after creation.
+
         Args:
-            tools: List of tool instances
+            tools: Optional list of tool instances (each must have get_definition())
         """
-        self.tools = {tool.get_definition().name: tool for tool in tools}
-        self.tool_definitions = [tool.get_definition() for tool in tools]
-    
+        self.tools: Dict[str, Any] = {}
+        self.tool_definitions: List[ToolDefinition] = []
+
+        if tools:
+            for tool in tools:
+                defn = tool.get_definition()
+                self.tools[defn.name] = tool
+                self.tool_definitions.append(defn)
+
+    def register_tool(self, name: str, tool: Any) -> None:
+        """
+        Register a tool instance under the given name.
+
+        Args:
+            name: Tool name (must match the tool's get_definition().name)
+            tool: Tool instance with get_definition() method
+        """
+        self.tools[name] = tool
+        defn = tool.get_definition()
+        # Replace existing definition if already registered
+        self.tool_definitions = [
+            d for d in self.tool_definitions if d.name != name
+        ]
+        self.tool_definitions.append(defn)
+
     def execute(self, tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
         """
         Execute a tool function with given parameters.
@@ -546,27 +589,23 @@ class ToolExecutor:
             )
         
         tool = self.tools[tool_name]
-        
-        # Route to appropriate method based on tool
-        if tool_name == "query_database":
-            return tool.execute_query(**parameters)
-        elif tool_name == "get_service_metrics":
-            return tool.get_metrics(**parameters)
-        elif tool_name == "get_service_status":
-            return tool.get_status(**parameters)
-        elif tool_name == "list_services":
-            return tool.list_services(**parameters)
-        elif tool_name == "get_incident_history":
-            return tool.get_incidents(**parameters)
-        elif tool_name == "get_team_info":
-            return tool.get_team_info(**parameters)
-        elif tool_name == "compare_services":
-            return tool.compare_services(**parameters)
+        method_name = self._METHOD_MAP.get(tool_name)
+
+        if method_name and hasattr(tool, method_name):
+            method = getattr(tool, method_name)
+            try:
+                return method(**parameters)
+            except TypeError as e:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    error=f"Invalid parameters for tool '{tool_name}': {str(e)}"
+                )
         else:
             return ToolResult(
                 success=False,
                 data=None,
-                error=f"Unknown tool: {tool_name}"
+                error=f"Unknown tool or missing method: {tool_name}"
             )
     
     def get_tool_definitions(self) -> List[ToolDefinition]:

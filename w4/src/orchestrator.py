@@ -126,14 +126,27 @@ class Orchestrator:
         if not self.tool_orchestrator:
             raise ValueError("ToolOrchestrator not initialized. Provide tool_executor to use L3.")
         
-        # First, retrieve context from RAG (optional but helpful)
-        try:
-            chunks = self.rag_pipeline.retrieve(query=request.query, top_k=5)
-            context = self.rag_pipeline._format_chunks_as_context(chunks)
-        except Exception:
-            # If RAG fails, continue without context
-            chunks = []
-            context = ""
+        # For L3, we can optionally retrieve context from RAG
+        # But for numerical queries, we should minimize RAG context to avoid confusion
+        chunks = []
+        context = ""
+        
+        # Check if query is about numerical data (should use tools primarily)
+        numerical_keywords = ['cost', 'chi phí', 'latency', 'metrics', 'total', 'bao nhiêu', 'how much', 'incidents', 'sla']
+        is_numerical_query = any(keyword in request.query.lower() for keyword in numerical_keywords)
+        
+        if not is_numerical_query:
+            # For non-numerical queries, retrieve RAG context
+            try:
+                chunks = self.rag_pipeline.retrieve(query=request.query, top_k=5)
+                context = self.rag_pipeline._format_chunks_as_context(chunks)
+            except Exception:
+                # If RAG fails, continue without context
+                pass
+        else:
+            # For numerical queries, provide minimal or no RAG context
+            # This forces LLM to use tools instead of trying to answer from documents
+            context = "Lưu ý: Câu hỏi này yêu cầu dữ liệu số liệu chính xác. Hãy sử dụng tools để truy vấn database hoặc monitoring API."
         
         # Use ToolOrchestrator to process query with tools
         result = self.tool_orchestrator.process_query_with_tools(
@@ -150,9 +163,92 @@ class Orchestrator:
         )
     
     def _process_l4(self, request: QueryRequest) -> QueryResponse:
-        """Process L4 query: Memory-enabled multi-turn conversation."""
-        # TODO: Implement L4 processing with memory
-        raise NotImplementedError("L4 processing not yet implemented")
+        """
+        Process L4 query: Memory-enabled multi-turn conversation.
+
+        Flow:
+        1. Load conversation history from MemoryManager
+        2. Format history as context string
+        3. Retrieve optional RAG context
+        4. Process with ToolOrchestrator (passing memory context)
+        5. Save turn to MemoryManager
+        """
+        if not self.memory_manager:
+            raise ValueError(
+                "MemoryManager not initialized. Provide memory_manager to use L4."
+            )
+        if not self.tool_orchestrator:
+            raise ValueError(
+                "ToolOrchestrator not initialized. Provide tool_executor to use L4."
+            )
+
+        # Require session_id for L4
+        session_id = request.session_id
+        if not session_id:
+            raise ValueError(
+                "session_id is required for L4 multi-turn conversations. "
+                "Please include session_id in the request."
+            )
+
+        # 1. Load conversation history
+        history = self.memory_manager.get_history(session_id)
+        memory_context = self.memory_manager.format_for_llm(history)
+
+        # 2. Optionally retrieve RAG context
+        chunks = []
+        rag_context = ""
+        numerical_keywords = [
+            'cost', 'chi phí', 'latency', 'metrics', 'total',
+            'bao nhiêu', 'how much', 'incidents', 'sla'
+        ]
+        is_numerical_query = any(
+            kw in request.query.lower() for kw in numerical_keywords
+        )
+        if not is_numerical_query:
+            try:
+                chunks = self.rag_pipeline.retrieve(query=request.query, top_k=5)
+                rag_context = self.rag_pipeline._format_chunks_as_context(chunks)
+            except Exception:
+                pass
+
+        # 3. Build combined context: memory + optional RAG
+        combined_context = ""
+        if memory_context:
+            combined_context += memory_context + "\n"
+        if rag_context:
+            combined_context += rag_context + "\n"
+        if is_numerical_query and not rag_context:
+            combined_context += (
+                "Lưu ý: Câu hỏi này yêu cầu dữ liệu số liệu chính xác. "
+                "Hãy sử dụng tools để truy vấn database hoặc monitoring API.\n"
+            )
+
+        # 4. Process with ToolOrchestrator using L4 system prompt
+        result = self.tool_orchestrator.process_query_with_tools(
+            query=request.query,
+            context=combined_context,
+            rag_chunks=chunks,
+            level="L4"
+        )
+
+        answer = result.get("answer", "")
+
+        # 5. Save turn to memory
+        turn = ConversationTurn(
+            turn_id=len(history) + 1,
+            timestamp=datetime.now(),
+            query=request.query,
+            response=answer,
+            context_used=result.get("sources", [])
+        )
+        self.memory_manager.save_turn(session_id, turn)
+
+        return QueryResponse(
+            answer=answer,
+            sources=result.get("sources", []),
+            tools_used=result.get("tools_used", []),
+            processing_time=0.0  # Will be set by process_query
+        )
 
 
 class ToolOrchestrator:
@@ -188,7 +284,8 @@ class ToolOrchestrator:
         self,
         query: str,
         context: str = "",
-        rag_chunks: Optional[List[Any]] = None
+        rag_chunks: Optional[List[Any]] = None,
+        level: str = "L3"
     ) -> Dict[str, Any]:
         """
         Main orchestration loop for tool-augmented queries.
@@ -234,12 +331,18 @@ class ToolOrchestrator:
         # Tool execution loop
         for iteration in range(self.max_iterations):
             try:
+                # Choose system prompt based on level
+                if level == "L4":
+                    system_prompt = self._get_l4_system_prompt()
+                else:
+                    system_prompt = self._get_l3_system_prompt()
+
                 # Call LLM with tool definitions
                 request_body = {
                     "anthropic_version": "bedrock-2023-05-31",
                     "max_tokens": 4000,
                     "temperature": 0.0,
-                    "system": self._get_l3_system_prompt(),
+                    "system": system_prompt,
                     "messages": messages,
                     "tools": tool_definitions
                 }
@@ -368,57 +471,133 @@ class ToolOrchestrator:
     def _get_l3_system_prompt(self) -> str:
         """
         Get system prompt for L3 with tool selection guidance.
-        
+
         Returns:
             System prompt string
         """
-        return """Bạn là trợ lý AI của GeekBrain, một fintech startup. Bạn có thể trả lời câu hỏi bằng cách sử dụng:
-1. Thông tin từ cơ sở tri thức (knowledge base documents) - cho policies, architecture, team info
-2. Database queries - cho dữ liệu lịch sử (historical costs, incidents, SLA targets, daily metrics)
-3. Monitoring API - cho trạng thái hệ thống hiện tại và metrics thời gian thực
+        return self._build_system_prompt(level="L3", conversation_context="")
 
-HƯỚNG DẪN CHỌN TOOL:
-- Sử dụng query_database cho:
-  * Dữ liệu lịch sử (Jan-Mar 2026)
-  * Chi phí chính xác, incident records, SLA targets
-  * Câu hỏi như "Chi phí của X trong Q1 là bao nhiêu?" hoặc "Y có bao nhiêu incidents?"
+    def _get_l4_system_prompt(self, conversation_context: str = "") -> str:
+        """
+        Get system prompt for L4 with memory + pronoun resolution instructions.
 
-- Sử dụng get_service_metrics cho:
-  * Dữ liệu thời gian thực (hiện tại)
-  * Latency, error rate, request volume đang diễn ra
-  * Câu hỏi như "Latency hiện tại của X là bao nhiêu?" hoặc "Y có healthy không?"
+        Args:
+            conversation_context: Formatted conversation history string
 
-- Sử dụng get_service_status cho:
-  * Trạng thái hoạt động hiện tại của service (healthy/degraded/down)
+        Returns:
+            System prompt string for L4
+        """
+        return self._build_system_prompt(level="L4", conversation_context=conversation_context)
 
-- Sử dụng list_services cho:
-  * Danh sách tất cả services trong hệ thống
+    def _build_system_prompt(self, level: str = "L3", conversation_context: str = "") -> str:
+        """
+        Build system prompt for L3 or L4.
 
-- Sử dụng get_incident_history cho:
-  * Lịch sử incidents của một service cụ thể
+        Args:
+            level: "L3" or "L4"
+            conversation_context: Formatted memory string (L4 only)
 
-- Sử dụng get_team_info cho:
-  * Thông tin về team (lead, members, responsibilities)
+        Returns:
+            System prompt string
+        """
+        base = """Bạn là trợ lý AI của GeekBrain, một fintech startup. 
 
-- Sử dụng compare_services cho:
-  * So sánh metrics giữa nhiều services
+⚠️ QUY TẮC QUAN TRỌNG NHẤT - ĐỌC KỸ:
+1. Với MỌI câu hỏi về SỐ LIỆU (chi phí, cost, latency, metrics, incidents count, etc.), bạn BẮT BUỘC phải sử dụng tools
+2. KHÔNG BAO GIỜ trả lời số liệu dựa trên knowledge base documents - documents chỉ chứa thông tin định tính
+3. Nếu câu hỏi có từ khóa: "cost", "chi phí", "total", "how much", "bao nhiêu", "latency", "metrics", "incidents" → PHẢI dùng tool
+4. Knowledge base CHỈ dùng cho: policies, team info, architecture, postmortems (không có số liệu)
 
-- Sử dụng thông tin từ knowledge base (đã được cung cấp trong context) cho:
-  * Company policies, team structure, architecture
-  * Postmortem details, runbooks, documentation
-  * Câu hỏi như "Ai là lead của Team X?" hoặc "Deployment policy là gì?"
+CÔNG CỤ CÓ SẴN:
 
-QUY TẮC QUAN TRỌNG:
-- Với câu hỏi về số liệu, BẮT BUỘC phải sử dụng tools - không được đoán hoặc ước lượng
-- Giữ nguyên số chính xác từ kết quả tool - không làm tròn trừ khi được yêu cầu
-- Nếu tool thất bại, giải thích lỗi và đề xuất phương án thay thế
-- Có thể sử dụng nhiều tools liên tiếp nếu cần
+🔧 query_database - CHO DỮ LIỆU LỊCH SỬ (Jan-Mar 2026):
+   - Chi phí theo tháng (monthly_costs table)
+   - Incident history (incidents table)
+   - SLA targets (sla_targets table)
+   - Daily metrics (daily_metrics table)
+   
+   Ví dụ SQL:
+   - Tổng chi phí Q1: SELECT SUM(total_cost) FROM monthly_costs WHERE service='PaymentGW' AND month IN ('2026-01','2026-02','2026-03')
+   - Chi phí tháng 3: SELECT total_cost FROM monthly_costs WHERE service='PaymentGW' AND month='2026-03'
+   - SLA target: SELECT latency_p99_ms FROM sla_targets WHERE service='NotificationSvc'
 
-TRÍCH DẪN NGUỒN:
-- Trích dẫn kết quả tool: [Nguồn: Database query] hoặc [Nguồn: Monitoring API]
-- Trích dẫn documents: [Nguồn: document_name.md]
+🔧 get_service_metrics - CHO DỮ LIỆU THỜI GIAN THỰC:
+   - Current latency (p50, p95, p99)
+   - Current error rate
+   - Current request volume
+   
+🔧 get_service_status - Trạng thái service (healthy/degraded/down)
 
-NGÔN NGỮ TRẢ LỜI: Tiếng Việt (trừ khi user hỏi bằng tiếng Anh)
+🔧 list_services - Danh sách tất cả services
 
-Hãy phân tích câu hỏi cẩn thận và quyết định tool nào phù hợp nhất để trả lời chính xác.
+🔧 get_incident_history - Lịch sử incidents
+
+🔧 get_team_info - Thông tin team từ knowledge base
+
+🔧 compare_services - So sánh metrics giữa services
+
+CÁCH XỬ LÝ CÂU HỎI:
+
+Bước 1: Phân tích câu hỏi
+- Có yêu cầu số liệu? → Dùng tool (database hoặc metrics API)
+- Chỉ hỏi thông tin định tính? → Dùng knowledge base context
+
+Bước 2: Chọn tool phù hợp
+- Dữ liệu lịch sử (Q1, tháng 3, Jan-Mar) → query_database
+- Dữ liệu hiện tại (current, now, đang) → get_service_metrics
+- So sánh với SLA → Cần cả 2 tools
+
+Bước 3: Trả lời
+- Giữ NGUYÊN số chính xác từ tool (không làm tròn)
+- Trích dẫn nguồn: [Nguồn: Database query] hoặc [Nguồn: Monitoring API]
+
+VÍ DỤ:
+
+❌ SAI:
+Q: "Chi phí PaymentGW Q1 2026 là bao nhiêu?"
+A: "Theo document, chi phí đang tăng..." (KHÔNG được trả lời như vậy!)
+
+✅ ĐÚNG:
+Q: "Chi phí PaymentGW Q1 2026 là bao nhiêu?"
+→ Dùng query_database với SQL: SELECT SUM(total_cost) FROM monthly_costs WHERE service='PaymentGW' AND month IN ('2026-01','2026-02','2026-03')
+→ Nhận kết quả: 16500
+A: "Tổng chi phí của PaymentGW trong Q1 2026 là $16,500. [Nguồn: Database query]"
+
+NGÔN NGỮ: Tiếng Việt (trừ khi user hỏi bằng tiếng Anh)
 """
+
+        # L4 extension: pronoun resolution
+        if level == "L4":
+            base += """
+
+---
+🧠 CHẾ ĐỘ L4 - MULTI-TURN CONVERSATION VỚI MEMORY:
+
+Bạn đang xử lý hội thoại nhiều lượt. Lịch sử cuộc trò chuyện được cung cấp ở đầu context.
+
+QUY TẮC GIẢI QUYẾT ĐẠI TỪ (Pronoun Resolution):
+- Khi user dùng "nó", "its", "it", "dịch vụ đó", "that service" → xác định entity từ lịch sử hội thoại
+- Khi user dùng "họ", "they", "their team", "team đó" → xác định team từ context trước
+- Khi user hỏi follow-up không đề cập tên rõ ràng → suy luận từ lịch sử cuộc trò chuyện
+- Nếu không thể xác định entity → hỏi lại user để làm rõ
+
+VÍ DỤ PRONOUN RESOLUTION:
+
+Turn 1: "Service nào có chi phí cao nhất tháng 3/2026?" → "PaymentGW ($7,500)"
+Turn 2: "Tại sao chi phí của nó tăng đột biến?" 
+  → "nó" = PaymentGW (từ turn 1)
+  → Tìm postmortem của PaymentGW trong knowledge base
+  → Trả lời dựa trên thông tin postmortem
+
+Turn 3: "Team nào chịu trách nhiệm?"
+  → Context = PaymentGW
+  → Trả lời: "Team Platform, do Alex Chen lãnh đạo"
+
+Turn 4: "Deadline review postmortem đã qua chưa?"
+  → Context = PaymentGW postmortem
+  → Kiểm tra deadline từ document
+
+Bây giờ hãy xử lý câu hỏi với đầy đủ context từ lịch sử hội thoại!
+"""
+
+        return base
