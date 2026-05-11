@@ -1,6 +1,6 @@
 terraform {
   required_version = ">= 1.0"
-  
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -23,7 +23,7 @@ data "aws_caller_identity" "current" {}
 # S3 bucket for knowledge base documents
 resource "aws_s3_bucket" "knowledge_base" {
   bucket = "geekbrain-kb-${var.environment}"
-  
+
   tags = {
     Name        = "GeekBrain Knowledge Base"
     Environment = var.environment
@@ -34,7 +34,7 @@ resource "aws_s3_bucket" "knowledge_base" {
 # Enable versioning
 resource "aws_s3_bucket_versioning" "knowledge_base" {
   bucket = aws_s3_bucket.knowledge_base.id
-  
+
   versioning_configuration {
     status = "Enabled"
   }
@@ -64,12 +64,12 @@ resource "aws_s3_bucket_public_access_block" "knowledge_base" {
 
 # Upload knowledge base documents
 resource "aws_s3_object" "kb_documents" {
-  for_each = fileset("${path.module}/../data_package/knowledge_base", "*.md")
-  
+  for_each = fileset("${path.module}/../backend/data_package/knowledge_base", "*.md")
+
   bucket       = aws_s3_bucket.knowledge_base.id
   key          = "knowledge_base/${each.value}"
-  source       = "${path.module}/../data_package/knowledge_base/${each.value}"
-  etag         = filemd5("${path.module}/../data_package/knowledge_base/${each.value}")
+  source       = "${path.module}/../backend/data_package/knowledge_base/${each.value}"
+  etag         = filemd5("${path.module}/../backend/data_package/knowledge_base/${each.value}")
   content_type = "text/markdown"
 }
 
@@ -81,7 +81,7 @@ resource "aws_s3_object" "kb_documents" {
 resource "aws_opensearchserverless_security_policy" "kb_encryption" {
   name = "geekbrain-kb-encryption-${var.environment}"
   type = "encryption"
-  
+
   policy = jsonencode({
     Rules = [
       {
@@ -99,7 +99,7 @@ resource "aws_opensearchserverless_security_policy" "kb_encryption" {
 resource "aws_opensearchserverless_security_policy" "kb_network" {
   name = "geekbrain-kb-network-${var.environment}"
   type = "network"
-  
+
   policy = jsonencode([
     {
       Rules = [
@@ -119,7 +119,7 @@ resource "aws_opensearchserverless_security_policy" "kb_network" {
 resource "aws_opensearchserverless_access_policy" "kb_data_access" {
   name = "geekbrain-kb-access-${var.environment}"
   type = "data"
-  
+
   policy = jsonencode([
     {
       Rules = [
@@ -162,12 +162,12 @@ resource "aws_opensearchserverless_access_policy" "kb_data_access" {
 resource "aws_opensearchserverless_collection" "kb_vector_store" {
   name = "geekbrain-kb-${var.environment}"
   type = "VECTORSEARCH"
-  
+
   depends_on = [
     aws_opensearchserverless_security_policy.kb_encryption,
     aws_opensearchserverless_security_policy.kb_network
   ]
-  
+
   tags = {
     Name        = "GeekBrain KB Vector Store"
     Environment = var.environment
@@ -181,7 +181,7 @@ resource "time_sleep" "wait_for_collection" {
     aws_opensearchserverless_collection.kb_vector_store,
     aws_opensearchserverless_access_policy.kb_data_access
   ]
-  
+
   create_duration = "120s"
 }
 
@@ -196,7 +196,7 @@ resource "time_sleep" "wait_for_collection" {
 # IAM role for Bedrock Knowledge Base
 resource "aws_iam_role" "bedrock_kb_role" {
   name = "geekbrain-bedrock-kb-role-${var.environment}"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -217,7 +217,7 @@ resource "aws_iam_role" "bedrock_kb_role" {
       }
     ]
   })
-  
+
   tags = {
     Name        = "Bedrock KB Role"
     Environment = var.environment
@@ -229,7 +229,7 @@ resource "aws_iam_role" "bedrock_kb_role" {
 resource "aws_iam_role_policy" "bedrock_kb_s3_policy" {
   name = "s3-access"
   role = aws_iam_role.bedrock_kb_role.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -257,7 +257,7 @@ resource "aws_iam_role_policy" "bedrock_kb_s3_policy" {
 resource "aws_iam_role_policy" "bedrock_kb_aoss_policy" {
   name = "aoss-access"
   role = aws_iam_role.bedrock_kb_role.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -278,7 +278,7 @@ resource "aws_iam_role_policy" "bedrock_kb_aoss_policy" {
 resource "aws_iam_role_policy" "bedrock_kb_model_policy" {
   name = "bedrock-model-access"
   role = aws_iam_role.bedrock_kb_role.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -302,24 +302,24 @@ resource "aws_iam_role_policy" "bedrock_kb_model_policy" {
 resource "aws_bedrockagent_knowledge_base" "geekbrain_kb" {
   name     = "geekbrain-kb-${var.environment}"
   role_arn = aws_iam_role.bedrock_kb_role.arn
-  
+
   description = "Knowledge base for GeekBrain fintech startup documentation"
-  
+
   knowledge_base_configuration {
     type = "VECTOR"
-    
+
     vector_knowledge_base_configuration {
       embedding_model_arn = "arn:aws:bedrock:${var.aws_region}::foundation-model/amazon.titan-embed-text-v2:0"
     }
   }
-  
+
   storage_configuration {
     type = "OPENSEARCH_SERVERLESS"
-    
+
     opensearch_serverless_configuration {
       collection_arn    = aws_opensearchserverless_collection.kb_vector_store.arn
       vector_index_name = "geekbrain-kb-index"
-      
+
       field_mapping {
         vector_field   = "embedding"
         text_field     = "text"
@@ -327,7 +327,7 @@ resource "aws_bedrockagent_knowledge_base" "geekbrain_kb" {
       }
     }
   }
-  
+
   depends_on = [
     aws_iam_role_policy.bedrock_kb_s3_policy,
     aws_iam_role_policy.bedrock_kb_aoss_policy,
@@ -335,7 +335,7 @@ resource "aws_bedrockagent_knowledge_base" "geekbrain_kb" {
     aws_opensearchserverless_access_policy.kb_data_access,
     time_sleep.wait_for_collection
   ]
-  
+
   tags = {
     Name        = "GeekBrain Knowledge Base"
     Environment = var.environment
@@ -350,30 +350,30 @@ resource "aws_bedrockagent_knowledge_base" "geekbrain_kb" {
 resource "aws_bedrockagent_data_source" "kb_s3_source" {
   name              = "geekbrain-s3-docs"
   knowledge_base_id = aws_bedrockagent_knowledge_base.geekbrain_kb.id
-  
+
   description = "S3 data source containing 36 markdown documents"
-  
+
   data_source_configuration {
     type = "S3"
-    
+
     s3_configuration {
       bucket_arn = aws_s3_bucket.knowledge_base.arn
-      
+
       inclusion_prefixes = ["knowledge_base/"]
     }
   }
-  
+
   vector_ingestion_configuration {
     chunking_configuration {
       chunking_strategy = "FIXED_SIZE"
-      
+
       fixed_size_chunking_configuration {
         max_tokens         = 300
         overlap_percentage = 20
       }
     }
   }
-  
+
   depends_on = [
     aws_s3_object.kb_documents
   ]
@@ -472,8 +472,8 @@ resource "aws_iam_role_policy" "lambda_bedrock_policy" {
 # Package the Lambda function
 data "archive_file" "kb_sync_lambda" {
   type        = "zip"
-  source_file = "${path.module}/../lambda/kb_auto_sync_lambda.py"
-  output_path = "${path.module}/../lambda/kb_auto_sync_lambda.zip"
+  source_file = "${path.module}/../backend/lambda/kb_auto_sync_lambda.py"
+  output_path = "${path.module}/../backend/lambda/kb_auto_sync_lambda.zip"
 }
 
 # Lambda function
@@ -502,11 +502,11 @@ resource "aws_lambda_function" "kb_auto_sync" {
 
 # Permission for S3 to invoke Lambda
 resource "aws_lambda_permission" "s3_invoke" {
-  statement_id  = "AllowS3Invoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.kb_auto_sync.function_name
-  principal     = "s3.amazonaws.com"
-  source_arn    = aws_s3_bucket.knowledge_base.arn
+  statement_id   = "AllowS3Invoke"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.kb_auto_sync.function_name
+  principal      = "s3.amazonaws.com"
+  source_arn     = aws_s3_bucket.knowledge_base.arn
   source_account = data.aws_caller_identity.current.account_id
 }
 
