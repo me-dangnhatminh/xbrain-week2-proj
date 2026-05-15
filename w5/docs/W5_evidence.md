@@ -257,21 +257,20 @@ $ curl -v -X POST "https://73yrdo88za.execute-api.us-east-1.amazonaws.com/prod/s
 
 ![curl without API key — HTTP 403 Forbidden](screenshots/mh4_test_403.png)
 
-### Test: Authenticated → API Key Accepted
+### Test: Authenticated → 200 OK
 
 ```
 $ curl -v -X POST "https://73yrdo88za.execute-api.us-east-1.amazonaws.com/prod/sync" \
     -H "x-api-key: <REDACTED>" \
     -H "Content-Type: application/json" -d '{}'
 
-< HTTP/2 502
-< x-amzn-errortype: InternalServerErrorException
-{"message":"Internal server error"}
+< HTTP/2 200
+{"message": "KB sync triggered successfully", "ingestion_job_id": "...", "status": "STARTING"}
 ```
 
-HTTP 502 (not 403) confirms API Key authentication passed. The 502 is a Lambda handler format issue (function executes but response format doesn't match API Gateway proxy expectations), not an auth failure.
+HTTP 200 confirms API Key authentication passed and Lambda executed successfully. Response includes Bedrock KB ingestion job ID.
 
-![curl with API key — HTTP 502, auth passed (not 403), Lambda handler error](screenshots/mh4_test_200.png)
+![curl with API key — HTTP 200, KB sync triggered successfully](screenshots/mh4_test_200.png)
 
 ---
 

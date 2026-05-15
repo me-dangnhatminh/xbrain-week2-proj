@@ -7,18 +7,18 @@ data "aws_ec2_managed_prefix_list" "cloudfront" {
   name = "com.amazonaws.global.cloudfront.origin-facing"
 }
 
-# ALB: accepts HTTP only from CloudFront edge nodes
+# ALB: internal, accessed only via CloudFront VPC Origin
 resource "aws_security_group" "alb_sg" {
   name        = "${var.project_name}-alb-sg-appvpc"
-  description = "ALB in App VPC - HTTP from CloudFront only"
+  description = "Internal ALB - CloudFront VPC Origin only"
   vpc_id      = aws_vpc.app.id
 
   ingress {
-    description     = "HTTP from CloudFront edge"
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
+    description = "HTTP from CloudFront VPC Origin (private subnet CIDR)"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.11.0/24", "10.0.12.0/24"]
   }
 
   egress {
@@ -72,13 +72,13 @@ resource "aws_security_group" "ecs_task_sg" {
     prefix_list_ids = [aws_vpc_endpoint.dynamodb.prefix_list_id]
   }
 
-  # NFS to EFS in App VPC private subnets
+  # NFS to EFS in Data VPC (cross-VPC via peering)
   egress {
-    description = "NFS to EFS in App VPC"
+    description = "NFS to EFS in Data VPC"
     from_port   = 2049
     to_port     = 2049
     protocol    = "tcp"
-    cidr_blocks = ["10.0.11.0/24", "10.0.12.0/24"]
+    cidr_blocks = ["10.1.1.0/24", "10.1.2.0/24"]
   }
 
   # Localhost (monitoring API on port 8000 within same task)
@@ -115,10 +115,10 @@ resource "aws_ecs_cluster" "main" {
 
 resource "aws_lb" "app" {
   name               = "${var.project_name}-appvpc-alb"
-  internal           = false
+  internal           = true
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]
-  subnets            = [aws_subnet.app_public.id, aws_subnet.app_public_b.id]
+  subnets            = [aws_subnet.app_private.id, aws_subnet.app_private_b.id]
   tags               = { Name = "${var.project_name}-alb" }
 }
 
@@ -142,30 +142,7 @@ resource "aws_lb_listener" "http" {
   port              = 80
   protocol          = "HTTP"
 
-  # Default: reject requests not from CloudFront
   default_action {
-    type = "fixed-response"
-    fixed_response {
-      content_type = "text/plain"
-      message_body = "Forbidden"
-      status_code  = "403"
-    }
-  }
-}
-
-# Only forward requests that carry the CloudFront shared secret header
-resource "aws_lb_listener_rule" "cloudfront_validated" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 1
-
-  condition {
-    http_header {
-      http_header_name = "X-CloudFront-Secret"
-      values           = [var.cloudfront_origin_secret]
-    }
-  }
-
-  action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.backend.arn
   }

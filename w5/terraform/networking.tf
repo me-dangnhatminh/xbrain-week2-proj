@@ -355,6 +355,14 @@ resource "aws_vpc_peering_connection" "app_to_data" {
   peer_vpc_id = aws_vpc.data.id
   auto_accept = true
 
+  requester {
+    allow_remote_vpc_dns_resolution = true
+  }
+
+  accepter {
+    allow_remote_vpc_dns_resolution = true
+  }
+
   tags = { Name = "${var.project_name}-app-to-data-peering" }
 }
 
