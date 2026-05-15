@@ -18,7 +18,7 @@ resource "aws_security_group" "alb_sg" {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["10.0.11.0/24", "10.0.12.0/24"]
+    cidr_blocks = ["10.0.0.0/16"]
   }
 
   egress {
@@ -118,7 +118,7 @@ resource "aws_lb" "app" {
   internal           = true
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]
-  subnets            = [aws_subnet.app_private.id, aws_subnet.app_private_b.id]
+  subnets            = [aws_subnet.app_public.id, aws_subnet.app_public_b.id]
   tags               = { Name = "${var.project_name}-alb" }
 }
 
