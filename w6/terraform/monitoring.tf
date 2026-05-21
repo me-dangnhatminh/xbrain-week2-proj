@@ -69,6 +69,7 @@ resource "aws_cloudwatch_metric_alarm" "ecs_running_count" {
   statistic           = "Average"
   threshold           = 1
   alarm_description   = "No ECS tasks running - service is DOWN"
+  treat_missing_data  = "notBreaching"
 
   dimensions = {
     ClusterName = aws_ecs_cluster.main.name
@@ -133,6 +134,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_unhealthy_hosts" {
   statistic           = "Maximum"
   threshold           = 0
   alarm_description   = "ALB has unhealthy targets"
+  treat_missing_data  = "notBreaching"
 
   dimensions = {
     LoadBalancer = aws_lb.app.arn_suffix
