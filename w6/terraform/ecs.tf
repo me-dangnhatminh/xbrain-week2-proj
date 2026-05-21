@@ -3,9 +3,9 @@
 # =============================================================================
 
 # CloudFront managed prefix list
-data "aws_ec2_managed_prefix_list" "cloudfront" {
-  name = "com.amazonaws.global.cloudfront.origin-facing"
-}
+# data "aws_ec2_managed_prefix_list" "cloudfront" {
+#   name = "com.amazonaws.global.cloudfront.origin-facing"
+# }
 
 resource "aws_security_group" "alb_sg" {
   name        = "${var.project_name}-alb-sg-appvpc"
@@ -13,11 +13,11 @@ resource "aws_security_group" "alb_sg" {
   vpc_id      = aws_vpc.app.id
 
   ingress {
-    description     = "HTTP from CloudFront edge"
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
+    description = "HTTP from CloudFront edge"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -133,10 +133,11 @@ resource "aws_ecs_cluster" "main" {
 resource "aws_lb" "app" {
   name               = "${var.project_name}-appvpc-alb"
   internal           = false
-  load_balancer_type = "application"
+  load_balancer_type = "network"
   security_groups    = [aws_security_group.alb_sg.id]
 
   subnets = [aws_subnet.app_public.id]
+  depends_on = [aws_internet_gateway.app]
 
   tags = {
     Project     = "${var.project_name}"
@@ -148,7 +149,7 @@ resource "aws_lb" "app" {
 resource "aws_lb_target_group" "backend" {
   name        = "${var.project_name}-appvpc-tg"
   port        = 8001
-  protocol    = "HTTP"
+  protocol    = "TCP"
   vpc_id      = aws_vpc.app.id
   target_type = "ip"
 
@@ -169,7 +170,7 @@ resource "aws_lb_target_group" "backend" {
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.app.arn
   port              = 80
-  protocol          = "HTTP"
+  protocol          = "TCP"
 
   default_action {
     type             = "forward"
@@ -270,7 +271,7 @@ resource "aws_ecs_service" "backend" {
   name             = "${var.project_name}-backend-appvpc"
   cluster          = aws_ecs_cluster.main.id
   task_definition  = aws_ecs_task_definition.backend.arn
-  desired_count    = 2
+  desired_count    = 1
   launch_type      = "FARGATE"
   platform_version = "1.4.0"
 
@@ -376,10 +377,17 @@ resource "aws_iam_role_policy" "ecs_task" {
     Statement = [
       {
         Effect = "Allow"
-        Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+        Action = [
+          "bedrock:InvokeModel", 
+          "bedrock:InvokeModelWithResponseStream",
+          "aws-marketplace:ViewSubscriptions",
+          "aws-marketplace:Subscribe",
+          "aws-marketplace:Unsubscribe"
+        ]
         Resource = [
           "arn:aws:bedrock:*::foundation-model/*",
-          "arn:aws:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*"
+          "arn:aws:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+          "*"
         ]
       },
       {

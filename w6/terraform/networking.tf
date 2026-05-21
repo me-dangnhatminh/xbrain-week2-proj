@@ -35,7 +35,7 @@ resource "aws_vpc" "data" {
 resource "aws_subnet" "app_public" {
   vpc_id            = aws_vpc.app.id
   cidr_block        = "10.0.1.0/24"
-  availability_zone = "${var.aws_region}b"
+  availability_zone = "${var.aws_region}a"
   tags = {
     Project     = "${var.project_name}"
     Environment = "${var.environment}"
@@ -48,7 +48,7 @@ resource "aws_subnet" "app_public" {
 resource "aws_subnet" "app_private" {
   vpc_id            = aws_vpc.app.id
   cidr_block        = "10.0.11.0/24"
-  availability_zone = "${var.aws_region}b"
+  availability_zone = "${var.aws_region}a"
   tags = {
     Project     = "${var.project_name}"
     Environment = "${var.environment}"
@@ -60,7 +60,7 @@ resource "aws_subnet" "app_private" {
 resource "aws_subnet" "data_private" {
   vpc_id            = aws_vpc.data.id
   cidr_block        = "10.1.1.0/24"
-  availability_zone = "${var.aws_region}b"
+  availability_zone = "${var.aws_region}a"
   tags = {
     Project     = "${var.project_name}"
     Environment = "${var.environment}"
@@ -72,8 +72,21 @@ resource "aws_subnet" "data_private" {
 # Route Tables
 # =============================================================================
 
+resource "aws_internet_gateway" "app" {
+  vpc_id = aws_vpc.app.id
+  tags = {
+    Project     = "${var.project_name}"
+    Environment = "${var.environment}"
+    Name        = "${var.project_name}-igw"
+  }
+}
+
 resource "aws_route_table" "app_public_rt" {
   vpc_id = aws_vpc.app.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.app.id
+  }
   tags = {
     Project     = "${var.project_name}"
     Environment = "${var.environment}"
