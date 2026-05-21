@@ -88,3 +88,41 @@ output "bedrock_ds_id" {
 output "opensearch_collection_endpoint" {
   value = aws_opensearchserverless_collection.kb.collection_endpoint
 }
+
+# --- W6 Operations Outputs ---
+
+output "cost_guard_lambda_arn" {
+  description = "MH-COST-A: Cost Guard Lambda ARN"
+  value       = aws_lambda_function.cost_guard.arn
+}
+
+output "cost_guard_schedule_arn" {
+  description = "MH-COST-A: EventBridge daily schedule ARN"
+  value       = aws_scheduler_schedule.cost_guard_daily.arn
+}
+
+output "budget_sns_topic_arn" {
+  description = "MH-COST-A: Budget alert SNS topic ARN (Budgets → SNS → Lambda)"
+  value       = aws_sns_topic.budget_alerts.arn
+}
+
+output "security_guard_lambda_arn" {
+  description = "MH-SEC: Security Guard Lambda ARN"
+  value       = aws_lambda_function.security_guard.arn
+}
+
+output "kms_cmk_arn" {
+  description = "MH-SEC: KMS CMK ARN for S3 KB bucket (preventive control)"
+  value       = aws_kms_key.s3_kb.arn
+}
+
+output "kms_cmk_alias" {
+  description = "MH-SEC: KMS CMK alias"
+  value       = aws_kms_alias.s3_kb.name
+}
+
+output "cloudwatch_dashboard_url" {
+  description = "MH-OBS: CloudWatch Dashboard URL"
+  value       = "https://console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${aws_cloudwatch_dashboard.main.dashboard_name}"
+}
+

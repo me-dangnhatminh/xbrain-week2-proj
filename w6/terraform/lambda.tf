@@ -35,6 +35,12 @@ resource "aws_iam_role_policy" "lambda_kb_sync" {
         Effect   = "Allow"
         Action   = ["sqs:SendMessage"]
         Resource = aws_sqs_queue.lambda_dlq.arn
+      },
+      {
+        # MH-OBS: publish custom metrics from KB-sync Lambda
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
+        Resource = "*"
       }
     ]
   })

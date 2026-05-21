@@ -12,10 +12,38 @@ Environment Variables:
 import os
 import json
 import logging
+import time
 from datetime import datetime
 
 import boto3
 from botocore.exceptions import ClientError
+
+# MH-OBS: CloudWatch client for custom metric publishing
+_cloudwatch = None
+
+
+def _get_cw():
+    global _cloudwatch
+    if _cloudwatch is None:
+        _cloudwatch = boto3.client("cloudwatch")
+    return _cloudwatch
+
+
+def _put_metric(metric_name: str, value: float, unit: str = "Count"):
+    """Publish a custom metric to GeekBrain/Application namespace."""
+    try:
+        _get_cw().put_metric_data(
+            Namespace="GeekBrain/Application",
+            MetricData=[{
+                "MetricName": metric_name,
+                "Dimensions": [{"Name": "Service", "Value": "geekbrain-backend"}],
+                "Value": value,
+                "Unit": unit,
+            }]
+        )
+        logger.info("[MH-OBS] Published metric %s = %s %s", metric_name, value, unit)
+    except Exception as exc:
+        logger.warning("[MH-OBS] Failed to publish metric %s: %s", metric_name, exc)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -68,6 +96,7 @@ def handler(event, context):
 
     # Trigger KB sync
     client = boto3.client("bedrock-agent")
+    t_start = time.monotonic()
 
     try:
         response = client.start_ingestion_job(
@@ -76,11 +105,17 @@ def handler(event, context):
             description=f"Auto-sync triggered by S3 event at {datetime.now().isoformat()}"
         )
 
+        latency_ms = (time.monotonic() - t_start) * 1000
         job = response.get("ingestionJob", {})
         job_id = job.get("ingestionJobId", "unknown")
         status = job.get("status", "UNKNOWN")
 
-        logger.info(f"✅ Ingestion job started: {job_id} (status: {status})")
+        logger.info(f"✅ Ingestion job started: {job_id} (status: {status}), latency_ms={latency_ms:.1f}")
+
+        # MH-OBS: publish custom metrics
+        _put_metric("KBSyncItemsCount", float(len(changed_files)))
+        _put_metric("KBSyncLatencyMs", latency_ms, unit="Milliseconds")
+        _put_metric("KBSyncSuccess", 1.0)
 
         return {
             "statusCode": 200,
@@ -95,6 +130,9 @@ def handler(event, context):
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         error_msg = e.response["Error"]["Message"]
+
+        # MH-OBS: track failures as metric
+        _put_metric("KBSyncFailure", 1.0)
 
         if error_code == "ConflictException":
             logger.warning(f"⚠️ Sync already in progress: {error_msg}")
@@ -116,6 +154,7 @@ def handler(event, context):
 
     except Exception as e:
         logger.error(f"❌ Unexpected error: {str(e)}")
+        _put_metric("KBSyncFailure", 1.0)
         return {
             "statusCode": 500,
             "body": json.dumps({"error": str(e)})

@@ -13,12 +13,10 @@ resource "aws_s3_bucket_versioning" "knowledge_base" {
   versioning_configuration { status = "Enabled" }
 }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "knowledge_base" {
-  bucket = aws_s3_bucket.knowledge_base.id
-  rule {
-    apply_server_side_encryption_by_default { sse_algorithm = "AES256" }
-  }
-}
+# NOTE: S3 SSE is now managed via KMS CMK in security_guard.tf
+# (aws_s3_bucket_server_side_encryption_configuration.knowledge_base_cmk)
+# which provides audit-trail encryption for MH-SEC preventive control.
+
 
 resource "aws_s3_bucket_public_access_block" "knowledge_base" {
   bucket                  = aws_s3_bucket.knowledge_base.id
