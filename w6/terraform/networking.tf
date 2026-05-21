@@ -106,27 +106,12 @@ resource "aws_route_table_association" "data_private" {
 }
 
 # =============================================================================
-# VPC Endpoints (keep traffic on AWS backbone, bypass NAT)
+# VPC Endpoints (Gateway only — traffic via NAT EC2 for Interface endpoints)
+# Interface endpoints removed: traffic routes through NAT EC2 (geekbrain-nat-ec2)
+# Gateway endpoints kept (free, improve S3/DynamoDB performance)
 # =============================================================================
 
-# Security Group for Interface VPC Endpoints
-resource "aws_security_group" "vpc_endpoints" {
-  name        = "${var.project_name}-vpce-sg"
-  description = "Allow HTTPS from private subnets to VPC Endpoints"
-  vpc_id      = aws_vpc.app.id
-
-  ingress {
-    description = "HTTPS from within App VPC"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = [aws_vpc.app.cidr_block]
-  }
-
-  tags = { Name = "${var.project_name}-vpce-sg" }
-}
-
-# Gateway Endpoint
+# Gateway Endpoint: S3 (free)
 resource "aws_vpc_endpoint" "s3" {
   vpc_id       = aws_vpc.app.id
   service_name = "com.amazonaws.${var.aws_region}.s3"
@@ -136,7 +121,7 @@ resource "aws_vpc_endpoint" "s3" {
   tags = { Name = "${var.project_name}-vpce-s3" }
 }
 
-# Gateway Endpoint: DynamoDB (free, no ENI needed)
+# Gateway Endpoint: DynamoDB (free)
 resource "aws_vpc_endpoint" "dynamodb" {
   vpc_id       = aws_vpc.app.id
   service_name = "com.amazonaws.${var.aws_region}.dynamodb"
@@ -146,96 +131,6 @@ resource "aws_vpc_endpoint" "dynamodb" {
   tags = { Name = "${var.project_name}-vpce-dynamodb" }
 }
 
-# Interface Endpoint: Bedrock Runtime (model invocation)
-resource "aws_vpc_endpoint" "bedrock_runtime" {
-  vpc_id              = aws_vpc.app.id
-  service_name        = "com.amazonaws.${var.aws_region}.bedrock-runtime"
-  vpc_endpoint_type   = "Interface"
-  private_dns_enabled = true
-
-  subnet_ids         = [aws_subnet.app_private.id]
-  security_group_ids = [aws_security_group.vpc_endpoints.id]
-
-  tags = { Name = "${var.project_name}-vpce-bedrock-runtime" }
-}
-
-# Interface Endpoint: Bedrock Agent Runtime (KB Retrieve)
-resource "aws_vpc_endpoint" "bedrock_agent_runtime" {
-  vpc_id              = aws_vpc.app.id
-  service_name        = "com.amazonaws.${var.aws_region}.bedrock-agent-runtime"
-  vpc_endpoint_type   = "Interface"
-  private_dns_enabled = true
-
-  subnet_ids         = [aws_subnet.app_private.id]
-  security_group_ids = [aws_security_group.vpc_endpoints.id]
-
-  tags = { Name = "${var.project_name}-vpce-bedrock-agent-runtime" }
-}
-
-# Interface Endpoint: CloudWatch Logs (for ECS logging)
-resource "aws_vpc_endpoint" "logs" {
-  vpc_id              = aws_vpc.app.id
-  service_name        = "com.amazonaws.${var.aws_region}.logs"
-  vpc_endpoint_type   = "Interface"
-  private_dns_enabled = true
-
-  subnet_ids         = [aws_subnet.app_private.id]
-  security_group_ids = [aws_security_group.vpc_endpoints.id]
-
-  tags = { Name = "${var.project_name}-vpce-logs" }
-}
-
-# Interface Endpoint: ECR API (docker pull - image manifests)
-resource "aws_vpc_endpoint" "ecr_api" {
-  vpc_id              = aws_vpc.app.id
-  service_name        = "com.amazonaws.${var.aws_region}.ecr.api"
-  vpc_endpoint_type   = "Interface"
-  private_dns_enabled = true
-
-  subnet_ids         = [aws_subnet.app_private.id]
-  security_group_ids = [aws_security_group.vpc_endpoints.id]
-
-  tags = { Name = "${var.project_name}-vpce-ecr-api" }
-}
-
-# Interface Endpoint: ECR Docker (docker pull - image layers)
-resource "aws_vpc_endpoint" "ecr_dkr" {
-  vpc_id              = aws_vpc.app.id
-  service_name        = "com.amazonaws.${var.aws_region}.ecr.dkr"
-  vpc_endpoint_type   = "Interface"
-  private_dns_enabled = true
-
-  subnet_ids         = [aws_subnet.app_private.id]
-  security_group_ids = [aws_security_group.vpc_endpoints.id]
-
-  tags = { Name = "${var.project_name}-vpce-ecr-dkr" }
-}
-
-# Interface Endpoint: SSM (ECS execution role reads parameters)
-resource "aws_vpc_endpoint" "ssm" {
-  vpc_id              = aws_vpc.app.id
-  service_name        = "com.amazonaws.${var.aws_region}.ssm"
-  vpc_endpoint_type   = "Interface"
-  private_dns_enabled = true
-
-  subnet_ids         = [aws_subnet.app_private.id]
-  security_group_ids = [aws_security_group.vpc_endpoints.id]
-
-  tags = { Name = "${var.project_name}-vpce-ssm" }
-}
-
-# Interface Endpoint: OpenSearch Serverless (Bedrock KB vector store)
-resource "aws_vpc_endpoint" "aoss" {
-  vpc_id              = aws_vpc.app.id
-  service_name        = "com.amazonaws.${var.aws_region}.aoss"
-  vpc_endpoint_type   = "Interface"
-  private_dns_enabled = true
-
-  subnet_ids         = [aws_subnet.app_private.id]
-  security_group_ids = [aws_security_group.vpc_endpoints.id]
-
-  tags = { Name = "${var.project_name}-vpce-aoss" }
-}
 
 # =============================================================================
 # MH2: NACL — Defense-in-depth for App VPC private subnets
