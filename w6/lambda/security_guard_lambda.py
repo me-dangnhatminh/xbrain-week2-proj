@@ -11,6 +11,7 @@ Triggered by:
 import json
 import logging
 import boto3
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -61,9 +62,13 @@ def remediate_s3_public_access(bucket_name: str = None):
             if not is_fully_blocked:
                 buckets_to_fix.append(name)
                 logger.warning("VIOLATION: bucket '%s' has public access NOT fully blocked.", name)
-        except s3.exceptions.NoSuchPublicAccessBlockConfiguration:
-            buckets_to_fix.append(name)
-            logger.warning("VIOLATION: bucket '%s' has NO public access block configuration.", name)
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "NoSuchPublicAccessBlockConfiguration":
+                # No config exists at all = fully public = violation
+                buckets_to_fix.append(name)
+                logger.warning("VIOLATION: bucket '%s' has NO public access block configuration.", name)
+            else:
+                logger.error("Error checking bucket '%s': %s", name, e)
         except Exception as exc:
             logger.error("Error checking bucket '%s': %s", name, exc)
 

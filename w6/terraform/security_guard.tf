@@ -44,7 +44,7 @@ resource "aws_iam_role_policy" "security_guard" {
         Action = [
           "s3:ListAllMyBuckets",
           "s3:GetBucketPublicAccessBlock",
-          "s3:PutPublicAccessBlock",
+          "s3:PutBucketPublicAccessBlock",
           "s3:GetBucketPolicyStatus",
           "s3:GetBucketAcl"
         ]
