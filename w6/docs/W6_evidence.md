@@ -482,9 +482,14 @@ aws ec2 authorize-security-group-ingress \
 
 Response shows `"remediated_security_groups": ["sg-..."]` confirming the open rule was revoked.
 
-**Step 3 — After state (rule removed):**
+**Step 3 — CloudTrail evidence of `RevokeSecurityGroupIngress` API call by the Security Guard Lambda:**
 
-![SG inbound rules AFTER — SSH 0.0.0.0/0 gone](screenshots/sec-13-sg-open-ssh-AFTER.png)
+![CloudTrail RevokeSecurityGroupIngress event](screenshots/sec-12-cloudtrail-revoke-sg-ingress.png)
+
+The CloudTrail event shows:
+- `eventName`: `RevokeSecurityGroupIngress`
+- `userIdentity.arn`: matches the Security Guard Lambda execution role
+- Confirms the SG remediation was performed by automation — completing the second fix loop
 
 ### Bonus (+0.25): Cost Anomaly Automation & Account Limitations ADR
 
