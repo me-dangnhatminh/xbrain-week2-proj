@@ -486,11 +486,17 @@ Response shows `"remediated_security_groups": ["sg-..."]` confirming the open ru
 
 ![SG inbound rules AFTER — SSH 0.0.0.0/0 gone](screenshots/sec-13-sg-open-ssh-AFTER.png)
 
-**Step 4 — CloudTrail evidence of `RevokeSecurityGroupIngress` API call by the Security Guard Lambda:**
+### Bonus (+0.25): Cost Anomaly Automation & Account Limitations ADR
 
-![CloudTrail RevokeSecurityGroupIngress event](screenshots/sec-14-cloudtrail-revoke-sg-ingress.png)
+The implementation of Tag-based Cost Anomaly Detection encountered two strict permission boundaries imposed by the Payer Account on our Workshop Linked Account:
+1. Inability to activate *User-defined tags* in the Billing Console (Access Denied).
+2. Lack of permissions to create a *Custom Monitor* (error stating only AWS services monitors are allowed).
 
-The CloudTrail event shows:
-- `eventName`: `RevokeSecurityGroupIngress`
-- `userIdentity.arn`: matches the Security Guard Lambda execution role
-- Confirms the SG remediation was performed by automation — completing the second fix loop
+**Workaround & Architecture:** The team flexibly adapted by utilizing the **Managed by AWS (Service dimension)** Monitor to continue tracking anomalous spend. Crucially, the automated architecture flow remains fully intact: We implemented an **EventBridge Rule** (`geekbrain-cost-anomaly-rule`) that intercepts the `aws.costanomalydetection` event and wires it directly to the **SNS Topic `geekbrain-budget-alerts`**. This successfully distributes the alert to Email and triggers the Cost Guard Lambda. This demonstrates our ability to design and implement automated event-driven responses despite environmental permission constraints.
+
+**Evidence:**
+- Cost Anomaly Monitor created as Managed by AWS:
+![AWS Services Monitor](screenshots/bonus-cost-anomaly-monitor.png)
+
+- EventBridge Rule capturing the anomaly event and wiring it to SNS:
+![EventBridge Rule to SNS](screenshots/bonus-cost-anomaly-rule.png)
