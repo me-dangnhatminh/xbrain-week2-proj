@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | Group | GROUP 5 — XBrain |
-| Members | Minh - Quang Vinh - Hoang - Nam - Quyen - Thuy |
+| Members | Minh - Quang Vinh - Hoang - Nam - Quyen - Thuy - Son |
 | Repository | https://github.com/me-dangnhatminh/xbrain-dangnhatminh |
 | W5 Evidence Pack | [W5 Evidence](../docs/W5_evidence.md) |
 | Date | 2026-05-22 |
